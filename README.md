@@ -11,9 +11,16 @@ Copy `stbt_rig.py` into your test-pack.
 
 Configuration:
 
-    git config stbt.portal-url https://example.stb-tester.com
-    git config stbt.portal-auth-token abcdefghijklmnop
-    git config stbt.node-id stb-tester-e5a091e40de1
+1. Specify portal to use in `stbt.conf`:
+
+        [test-pack]
+        portal_url = https://example.stb-tester.com
+
+2. Generate auth token.  See [Authentication] in the stb-tester REST API
+   documentation.  You will need to enter this the first time you run the
+   program.
+
+[Authentication]: https://stb-tester.com/manual/rest-api-v2#authentication
 
 # Usage
 
@@ -21,7 +28,7 @@ Configuration:
 
 Run a test:
 
-    $ stbt_rig.py run tests/example.py::test_example
+    $ stbt_rig.py --node-id stb-tester-e5a091e40de1 run tests/example.py::test_example
 
 ## Python API Example
 
@@ -43,13 +50,20 @@ Run a test:
 
 ## Python API Goals
 
-* Portability - The library and command line client are intended to be portable to any Python version
-* Ease of deployment - it should be possible to `pip install` this or to just copy-and-paste it into other repos for reuse
-    * All the code should appear in a single stbt_rig.py should be a single file.
-    * It's distributed under the liberal MIT licence to remove any barriers to entry
-    * It should have as few required dependencies as possible.  Currently it only requires `requests`, `enum` and a `git` installation.
+* Portability - The library and command line client are intended to be portable
+  to any Python version
+* Ease of deployment - it should be possible to `pip install` this or to just
+  copy-and-paste it into other repos for reuse
+    * All the code should appear in a single stbt_rig.py should be a single
+      file.
+    * It's distributed under the liberal MIT licence to remove any barriers to
+      entry
+    * It should have as few required dependencies as possible.  Currently it
+      only requires `requests`, `enum` and a `git` installation, with an
+      optional dependency on `keyring` for persisting the auth token.
 * Completeness - The whole of the stb-tester HTTP REST API should be exposed
-* Transparency - The Python API is intended to roughly have a 1 to 1 correspondence with the REST API
+* Transparency - The Python API is intended to roughly have a 1 to 1
+  correspondence with the REST API
 * Robustness - The library should help with mitigate common network problems
     * Should include retries for HTTP failures
 

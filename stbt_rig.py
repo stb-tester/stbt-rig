@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from ConfigParser import SafeConfigParser
 
 import requests
 from enum import Enum
@@ -25,6 +26,16 @@ def main(argv):
         "--force", action="store_true",
         help=("Don't fail if the node is in use, interrupt the existing job "
               "instead"))
+    run_parser.add_argument("--portal-url")
+
+    # Shouldn't pass auth token in on command line - otherwise it will be visible
+    # in /proc.  Pass it in a file instead.
+    run_parser.add_argument(
+        "--portal-auth-file",
+        help="name of file containing the HTTP REST API authentication token")
+
+    run_parser.add_argument("--node-id")
+
     run_group = run_parser.add_mutually_exclusive_group(required=True)
     run_group.add_argument("test_case", nargs='?')
     run_group.add_argument("-c")
@@ -32,29 +43,76 @@ def main(argv):
     ss_parser.add_argument("filename", default="screenshot.png", nargs='?')
     args = parser.parse_args(argv[1:])
 
-    testpack = TestPack()
-    portal = Portal(
-        testpack._git(['config', 'stbt.portal-url']).strip(),
-        testpack._git(['config', 'stbt.portal-auth-token']).strip())
-    node = Node(portal, testpack._git(['config', 'stbt.node-id']).strip())
+    config_parser = SafeConfigParser()
+    config_parser.read('.stbt.conf')
 
-    if args.command == "run":
-        commit_sha = testpack.push_git_snapshot()
-        job = node.run_tests(
-            commit_sha, [args.test_case], await_completion=True,
-            force=args.force)
-        result = job.list_results()[0]
-        result.print_logs()
-        if result.is_ok():
-            return 0
-        else:
-            return 1
-    elif args.command == "screenshot":
-        node.save_screenshot(args.filename)
+    portal_url = args.portal_url or config_parser.get('test_pack', 'portal_url')
+    node_id = args.node_id or config_parser.get('test_pack', 'node_id')
+
+    testpack = TestPack()
+    out = None
+
+    for portal_auth_token in try_portal_auth_tokens(
+            args.portal_auth_file, portal_url):
+
+        portal = Portal(portal_url, portal_auth_token)
+        node = Node(portal, node_id)
+
+        try:
+            if args.command == "run":
+                out = cmd_run(args, testpack, portal, node)
+            elif args.command == "screenshot":
+                out = cmd_screenshot(args, node)
+            else:
+                raise AssertionError(
+                    "Unreachable: Unknown command %r.  argparse should prevent this" %
+                    args.command)
+            break
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 403:
+                # Unauthorised, try again, but with a new password
+                pass
+            else:
+                raise
+
+
+def cmd_run(args, testpack, portal, node):
+    commit_sha = testpack.push_git_snapshot()
+    job = node.run_tests(
+        commit_sha, [args.test_case], await_completion=True, force=args.force)
+    result = job.list_results()[0]
+    result.print_logs()
+    if result.is_ok():
+        return 0
     else:
-        raise AssertionError(
-            "Unreachable: Unknown command %r.  argparse should prevent this" %
-            args.command)
+        return 1
+
+
+def cmd_screenshot(args, node):
+    node.save_screenshot(args.filename)
+
+
+def try_portal_auth_tokens(portal_auth_file, portal_url):
+    if portal_auth_file:
+        with open(portal_auth_file) as f:
+            yield f.read().strip()
+            return
+
+    while True:
+        try:
+            import keyring
+            out = keyring.get_password(portal_url, "")
+            if out:
+                yield out
+        except ImportError:
+            pass
+
+        sys.stderr.write('Enter Token for portal %r: ' % portal_url)
+        token = sys.stdin.readline().strip()
+        if token:
+            keyring.set_password(portal_url, "", token)
+            yield token
+        sys.stderr.write("Authentication Failure\n")
 
 
 class Result(object):
