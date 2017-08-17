@@ -35,6 +35,7 @@ def main(argv):
         help="name of file containing the HTTP REST API authentication token")
 
     run_parser.add_argument("--node-id")
+    run_parser.add_argument("--git-remote")
 
     run_group = run_parser.add_mutually_exclusive_group(required=True)
     run_group.add_argument("test_case", nargs='?')
@@ -49,7 +50,7 @@ def main(argv):
     portal_url = args.portal_url or config_parser.get('test_pack', 'portal_url')
     node_id = args.node_id or config_parser.get('test_pack', 'node_id')
 
-    testpack = TestPack()
+    testpack = TestPack(remote=args.git_remote)
     out = None
 
     for portal_auth_token in try_portal_auth_tokens(
