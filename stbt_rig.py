@@ -20,23 +20,25 @@ logger = logging.getLogger("stbt_rig")
 
 def main(argv):
     parser = argparse.ArgumentParser()
+    parser.add_argument("--portal-url")
+
+    # Shouldn't pass auth token in on command line - otherwise it will be visible
+    # in /proc.  Pass it in a file instead.
+    parser.add_argument(
+        "--portal-auth-file",
+        help="name of file containing the HTTP REST API authentication token")
+
+    parser.add_argument("--node-id")
+    parser.add_argument("--git-remote", default="origin")
+
+    parser.add_argument("-v", "--verbose", action="count", dest="verbosity")
+
     sub = parser.add_subparsers(dest="command")
     run_parser = sub.add_parser('run', help="Run a test-case")
     run_parser.add_argument(
         "--force", action="store_true",
         help=("Don't fail if the node is in use, interrupt the existing job "
               "instead"))
-    run_parser.add_argument("--portal-url")
-
-    # Shouldn't pass auth token in on command line - otherwise it will be visible
-    # in /proc.  Pass it in a file instead.
-    run_parser.add_argument(
-        "--portal-auth-file",
-        help="name of file containing the HTTP REST API authentication token")
-
-    run_parser.add_argument("--node-id")
-    run_parser.add_argument("--git-remote")
-    parser.add_argument("-v", "--verbose", action="count", dest="verbosity")
 
     run_group = run_parser.add_mutually_exclusive_group(required=True)
     run_group.add_argument("test_case", nargs='?')
