@@ -36,6 +36,7 @@ def main(argv):
 
     run_parser.add_argument("--node-id")
     run_parser.add_argument("--git-remote")
+    parser.add_argument("-v", "--verbose", action="count", dest="verbosity")
 
     run_group = run_parser.add_mutually_exclusive_group(required=True)
     run_group.add_argument("test_case", nargs='?')
@@ -50,7 +51,7 @@ def main(argv):
     portal_url = args.portal_url or config_parser.get('test_pack', 'portal_url')
     node_id = args.node_id or config_parser.get('test_pack', 'node_id')
 
-    testpack = TestPack(remote=args.git_remote)
+    testpack = TestPack(remote=args.git_remote, verbosity=args.verbosity)
     out = None
 
     for portal_auth_token in try_portal_auth_tokens(
@@ -337,11 +338,13 @@ class NodeBusyException(Exception):
 
 
 class TestPack(object):
-    def __init__(self, root=None, remote="origin", user_branch_prefix=None):
+    def __init__(self, root=None, remote="origin", user_branch_prefix=None,
+                 verbosity=0):
         if root is None:
             root = os.curdir
         self.root = root
         self.remote = remote
+        self.verbosity = verbosity
 
         if user_branch_prefix is None:
             user_branch_prefix = self._git([
@@ -357,6 +360,9 @@ class TestPack(object):
         env = kwargs.get('env', os.environ).copy()
         if extra_env:
             env.update(extra_env)
+
+        if self.verbosity >= 1:
+            sys.stderr.write('+git %s\n' % " ".join(cmd))
 
         return call(["git"] + cmd, cwd=self.root, env=env, **kwargs)
 
@@ -397,8 +403,11 @@ class TestPack(object):
 
     def push_git_snapshot(self):
         commit_sha = self.take_snapshot()
+        options = ['--force']
+        if self.verbosity <= 0:
+            options.append('--quiet')
         self._git([
-            'push', '--quiet', '--force', self.remote,
+            'push'] + options + [self.remote,
             '%s:refs/heads/%s/wip-snapshot' % (
                 commit_sha, self.user_branch_prefix)])
         return commit_sha
