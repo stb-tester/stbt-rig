@@ -39,6 +39,7 @@ def main(argv):
         "--force", action="store_true",
         help=("Don't fail if the node is in use, interrupt the existing job "
               "instead"))
+    run_parser.add_argument("--soak", action="store_true")
 
     run_group = run_parser.add_mutually_exclusive_group(required=True)
     run_group.add_argument("test_case", nargs='?')
@@ -83,7 +84,8 @@ def main(argv):
 def cmd_run(args, testpack, portal, node):
     commit_sha = testpack.push_git_snapshot()
     job = node.run_tests(
-        commit_sha, [args.test_case], await_completion=True, force=args.force)
+        commit_sha, [args.test_case], await_completion=True, force=args.force,
+        soak=args.soak)
     result = job.list_results()[0]
     result.print_logs()
     if result.is_ok():
@@ -278,8 +280,8 @@ class Portal(object):
             kwargs['remote_control'] = remote_control
         if category is not None:
             kwargs['category'] = category
-        if soak is not None:
-            kwargs['soak'] = soak
+        if soak:
+            kwargs['soak'] = "run forever"
         if shuffle is not None:
             kwargs['shuffle'] = shuffle
 
