@@ -119,6 +119,10 @@ def try_portal_auth_tokens(portal_auth_file, portal_url):
         if token:
             if keyring is not None:
                 keyring.set_password(portal_url, "", token)
+            else:
+                sys.stderr.write(
+                    "Tip: Install python package \"keyring\" to save this "
+                    "token for next time.\n")
             yield token
         sys.stderr.write("Authentication Failure\n")
 
