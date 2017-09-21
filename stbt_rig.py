@@ -105,6 +105,7 @@ def try_portal_auth_tokens(portal_auth_file, portal_url):
             return
 
     while True:
+        keyring = None
         try:
             import keyring
             out = keyring.get_password(portal_url, "")
@@ -116,7 +117,8 @@ def try_portal_auth_tokens(portal_auth_file, portal_url):
         sys.stderr.write('Enter Token for portal %r: ' % portal_url)
         token = sys.stdin.readline().strip()
         if token:
-            keyring.set_password(portal_url, "", token)
+            if keyring is not None:
+                keyring.set_password(portal_url, "", token)
             yield token
         sys.stderr.write("Authentication Failure\n")
 
