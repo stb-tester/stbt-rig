@@ -309,7 +309,6 @@ class Portal(object):
             job.await_completion(timeout=timeout)
 
             if assert_pass:
-                # Show logs of each test, in case any of them failed.
                 counts = job.json['result_counts']
                 assert counts['pass'] == counts['total']
 
