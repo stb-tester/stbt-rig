@@ -72,6 +72,26 @@ Run a test:
 * Convenience for test-script development
 * Simple and robust CI system integration
 
+* [ ] Grab thumbnail - `/api/v2/nodes/(node_id)/thumbnail.jpg`
+* [ ] List test cases - `/api/v2/test_pack/<test_pack_sha>/test_case_names`
+* Run tests - `/api/v2/run_tests`
+    * [x] Single test-case
+    * [ ] Multiple test cases
+    * [ ] Specify remote control
+    * [ ] Specify category
+    * [x] Run tests in soak
+    * [ ] Shuffle
+    * [ ] Tags
+    * [x] Wait for completion
+    * [x] Set exit status
+* [ ] List results `/api/v2/results`
+    * [x] Get result of job we started
+    * [ ] Get result of other jobs/other search filters
+    * [ ] Save results in xUnit format
+* Get detailed information about a test run `/api/v2/results/(result_id)/`
+    * [ ] Download artifacts
+    * [ ] Artifact cache based on git sha headers?
+
 # TODO
 
 - [ ] Ensure that every REST API endpoint is covered
