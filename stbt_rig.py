@@ -19,6 +19,8 @@ logger = logging.getLogger("stbt_rig")
 
 
 def main(argv):
+    logging.basicConfig()
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--portal-url")
 
