@@ -20,8 +20,6 @@ logger = logging.getLogger("stbt_rig")
 
 
 def main(argv):
-    logging.basicConfig()
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--portal-url")
 
@@ -50,6 +48,8 @@ def main(argv):
     ss_parser = sub.add_parser('screenshot', help="Save a screenshot to disk")
     ss_parser.add_argument("filename", default="screenshot.png", nargs='?')
     args = parser.parse_args(argv[1:])
+
+    logging.basicConfig(level=logging.WARNING - args.verbosity * 10)
 
     config_parser = SafeConfigParser()
     config_parser.read('.stbt.conf')
