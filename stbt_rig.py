@@ -80,7 +80,11 @@ def main(argv):
                 # Unauthorised, try again, but with a new password
                 pass
             else:
-                raise
+                sys.stderr.write(
+                    "stbt-rig: HTTP %i Error: %s during %s %s\n" % (
+                        e.response.status_code, e.response.text,
+                        e.request.method, e.request.url))
+                return 1
 
 
 def cmd_run(args, testpack, portal, node):
