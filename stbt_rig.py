@@ -9,6 +9,7 @@ import sys
 import tempfile
 import time
 from ConfigParser import SafeConfigParser
+from contextlib import contextmanager
 
 import requests
 from enum import Enum
@@ -399,15 +400,15 @@ class TestPack(object):
         base_commit = self.get_sha(obj_type="commit")
 
         # state of the working tree
-        with tempfile.NamedTemporaryFile(
-                prefix="index-snapshot-") as tmp_index:
+        with named_temporary_directory(prefix="stbt-rig-git-") as tmpdir:
+            tmp_index = os.path.join(tmpdir, "index")
             git_dir = self._git(['rev-parse', '--git-dir']).strip()
-            shutil.copyfile('%s/index' % git_dir, tmp_index.name)
+            shutil.copyfile('%s/index' % git_dir, tmp_index)
             self._git(['add', '-u'],
-                      extra_env={'GIT_INDEX_FILE': tmp_index.name})
+                      extra_env={'GIT_INDEX_FILE': tmp_index})
             write_tree = self._git(
                 ['write-tree'],
-                extra_env={'GIT_INDEX_FILE': tmp_index.name}).strip()
+                extra_env={'GIT_INDEX_FILE': tmp_index}).strip()
 
         if self.get_sha(obj_type="tree") == write_tree:
             return base_commit
@@ -426,6 +427,16 @@ class TestPack(object):
             '%s:refs/heads/%s/wip-snapshot' % (
                 commit_sha, self.user_branch_prefix)])
         return commit_sha
+
+
+@contextmanager
+def named_temporary_directory(
+        suffix='', prefix='tmp', dir=None):  # pylint: disable=W0622
+    dirname = tempfile.mkdtemp(suffix, prefix, dir)
+    try:
+        yield dirname
+    finally:
+        shutil.rmtree(dirname)
 
 
 if __name__ == '__main__':
