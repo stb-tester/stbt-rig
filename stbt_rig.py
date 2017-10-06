@@ -14,7 +14,7 @@ from contextlib import contextmanager
 import requests
 from enum import Enum
 
-# pylint: disable=protected-access
+# pylint: disable=protected-access,invalid-name,missing-docstring
 
 logger = logging.getLogger("stbt_rig")
 
@@ -58,7 +58,6 @@ def main(argv):
     node_id = args.node_id or config_parser.get('test_pack', 'node_id')
 
     testpack = TestPack(remote=args.git_remote, verbosity=args.verbosity)
-    out = None
 
     for portal_auth_token in try_portal_auth_tokens(
             args.portal_auth_file, portal_url):
@@ -68,9 +67,9 @@ def main(argv):
 
         try:
             if args.command == "run":
-                out = cmd_run(args, testpack, portal, node)
+                return cmd_run(args, testpack, node)
             elif args.command == "screenshot":
-                out = cmd_screenshot(args, node)
+                return cmd_screenshot(args, node)
             else:
                 raise AssertionError(
                     "Unreachable: Unknown command %r.  argparse should prevent this" %
@@ -88,7 +87,7 @@ def main(argv):
                 return 1
 
 
-def cmd_run(args, testpack, portal, node):
+def cmd_run(args, testpack, node):
     commit_sha = testpack.push_git_snapshot()
     job = node.run_tests(
         commit_sha, [args.test_case], await_completion=True, force=args.force,
@@ -103,6 +102,7 @@ def cmd_run(args, testpack, portal, node):
 
 def cmd_screenshot(args, node):
     node.save_screenshot(args.filename)
+    return 0
 
 
 def try_portal_auth_tokens(portal_auth_file, portal_url):
@@ -205,7 +205,7 @@ class TestJob(object):
             # Save making another HTTP request
             return TestJob.Status.EXITED
         self._update()
-        return TestJob.Status(self.json['status'])
+        return TestJob.Status(self._json['status'])
 
     def _get(self, path="", **kwargs):
         r = self.portal._get(
@@ -220,7 +220,7 @@ class TestJob(object):
         return r
 
     def _update(self):
-        self.json = self._get().json()
+        self._json = self._get().json()
 
 
 class TimeoutException(RuntimeError):
@@ -422,10 +422,11 @@ class TestPack(object):
         options = ['--force']
         if self.verbosity <= 0:
             options.append('--quiet')
-        self._git([
-            'push'] + options + [self.remote,
-            '%s:refs/heads/%s/wip-snapshot' % (
-                commit_sha, self.user_branch_prefix)])
+        self._git(
+            ['push'] + options +
+            [self.remote,
+             '%s:refs/heads/%s/wip-snapshot' % (
+                 commit_sha, self.user_branch_prefix)])
         return commit_sha
 
 
