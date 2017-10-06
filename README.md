@@ -7,6 +7,26 @@ Python and command-line wrapper to the stb-tester REST API
 
 Copy `stbt_rig.py` into your test-pack.
 
+### Windows
+
+1. Install Python
+2. Install git
+3. Install stbt-rig dependencies with pip:
+
+        python -m pip install enum requests keyring
+
+### MacOS X
+
+1. Install stbt-rig dependencies with setuptools:
+
+        easy_install enum requests keyring
+
+### Linux Debian/Ubuntu
+
+1. Install stbt-rig dependencies with apt:
+
+        sudo apt-get install python-enum34 python-requests python-keyring
+
 ## Setup
 
 Configuration:
