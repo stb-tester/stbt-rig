@@ -12,7 +12,6 @@ from ConfigParser import SafeConfigParser
 from contextlib import contextmanager
 
 import requests
-from enum import Enum
 
 # pylint: disable=protected-access,invalid-name,missing-docstring
 
@@ -152,7 +151,7 @@ class Result(object):
 
 
 class TestJob(object):
-    class Status(Enum):
+    class Status(object):
         RUNNING = "running"
         EXITED = "exited"
 

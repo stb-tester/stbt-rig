@@ -13,19 +13,19 @@ Copy `stbt_rig.py` into your test-pack.
 2. Install git
 3. Install stbt-rig dependencies with pip:
 
-        python -m pip install enum requests keyring
+        python -m pip install requests keyring
 
 ### MacOS X
 
 1. Install stbt-rig dependencies with setuptools:
 
-        easy_install enum requests keyring
+        easy_install requests keyring
 
 ### Linux Debian/Ubuntu
 
 1. Install stbt-rig dependencies with apt:
 
-        sudo apt-get install python-enum34 python-requests python-keyring
+        sudo apt-get install python-requests python-keyring
 
 ## Setup
 
@@ -79,7 +79,7 @@ Run a test:
     * It's distributed under the liberal MIT licence to remove any barriers to
       entry
     * It should have as few required dependencies as possible.  Currently it
-      only requires `requests`, `enum` and a `git` installation, with an
+      only requires `requests` and a `git` installation, with an
       optional dependency on `keyring` for persisting the auth token.
 * Completeness - The whole of the stb-tester HTTP REST API should be exposed
 * Transparency - The Python API is intended to roughly have a 1 to 1
