@@ -3,6 +3,10 @@
 # stbt-rig
 Python and command-line wrapper to the stb-tester REST API
 
+<a href="https://travis-ci.org/stb-tester/stbt-rig">
+  <img src="https://travis-ci.org/stb-tester/stbt-rig.png?branch=master">
+</a>
+
 ## Installation
 
 Copy `stbt_rig.py` into your test-pack.

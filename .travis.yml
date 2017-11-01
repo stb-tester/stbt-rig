@@ -1,0 +1,11 @@
+language: python
+python:
+- '2.7'
+
+install:
+- cat /etc/os-release
+- sudo apt install python-keyring python-requests
+- sudo pip install pylint==1.5.2 astroid==1.4.4
+
+script:
+- pylint stbt_rig.py

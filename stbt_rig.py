@@ -13,7 +13,6 @@ from contextlib import contextmanager
 
 import requests
 
-# pylint: disable=protected-access,invalid-name,missing-docstring
 
 logger = logging.getLogger("stbt_rig")
 
@@ -430,8 +429,7 @@ class TestPack(object):
 
 
 @contextmanager
-def named_temporary_directory(
-        suffix='', prefix='tmp', dir=None):  # pylint: disable=W0622
+def named_temporary_directory(suffix='', prefix='tmp', dir=None):
     dirname = tempfile.mkdtemp(suffix, prefix, dir)
     try:
         yield dirname

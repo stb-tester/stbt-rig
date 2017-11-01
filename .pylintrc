@@ -1,0 +1,31 @@
+[MASTER]
+persistent=no
+
+[REPORTS]
+msg-template={path}:{line}:{column}: [{msg_id}({symbol}), {obj}] {msg}
+output-format=colorized
+reports=no
+
+[MESSAGES CONTROL]
+disable=
+  invalid-name,
+  locally-disabled,
+  locally-enabled,
+  missing-docstring,
+  protected-access,
+  redefined-builtin,
+  too-few-public-methods,
+  too-many-ancestors,
+  too-many-arguments,
+  too-many-boolean-expressions,
+  too-many-branches,
+  too-many-instance-attributes,
+  too-many-lines,
+  too-many-locals,
+  too-many-nested-blocks,
+  too-many-public-methods,
+  too-many-return-statements,
+  too-many-statements,
+
+[FORMAT]
+max-line-length=80
