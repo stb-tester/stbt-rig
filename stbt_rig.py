@@ -21,8 +21,8 @@ def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("--portal-url")
 
-    # Shouldn't pass auth token in on command line - otherwise it will be visible
-    # in /proc.  Pass it in a file instead.
+    # Shouldn't pass auth token on command line because it would be visible in
+    # /proc. Pass it in a file instead.
     parser.add_argument(
         "--portal-auth-file",
         help="name of file containing the HTTP REST API authentication token")
@@ -70,18 +70,19 @@ def main(argv):
                 return cmd_screenshot(args, node)
             else:
                 raise AssertionError(
-                    "Unreachable: Unknown command %r.  argparse should prevent this" %
-                    args.command)
+                    "Unreachable: Unknown command %r." % args.command)
             break
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 403:
                 # Unauthorised, try again, but with a new password
                 pass
             else:
-                sys.stderr.write(
-                    "stbt-rig: HTTP %i Error: %s during %s %s\n" % (
-                        e.response.status_code, e.response.text,
-                        e.request.method, e.request.url))
+                message = "stbt-rig: HTTP %i Error: %s" % (
+                    e.response.status_code, e.response.text)
+                if hasattr(e, "request"):
+                    message += " during %s %s" % (
+                        e.request.method, e.request.url)  # pylint:disable=no-member
+                sys.stderr.write(message + "\n")
                 return 1
 
 
@@ -281,8 +282,7 @@ class Portal(object):
     def run_tests(
             self, node_id, test_pack_revision, test_cases,
             remote_control=None, category=None, soak=None, shuffle=None,
-            force=False, timeout=None, await_completion=False,
-            assert_pass=False):
+            force=False, timeout=None, await_completion=False):
         if force:
             Node(self, node_id).stop_current_job()
 
@@ -316,11 +316,6 @@ class Portal(object):
 
         with job:
             job.await_completion(timeout=timeout)
-
-            if assert_pass:
-                counts = job.json['result_counts']
-                assert counts['pass'] == counts['total']
-
             return job
 
     def _get(self, endpoint, headers=None, *args, **kwargs):
