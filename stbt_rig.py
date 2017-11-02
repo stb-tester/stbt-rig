@@ -192,8 +192,7 @@ def main(argv):
 
     if not args.portal_url:
         try:
-            config_parser = ConfigParser.SafeConfigParser()
-            config_parser.read('.stbt.conf')
+            _, config_parser = read_stbt_conf(os.curdir)
             args.portal_url = config_parser.get('test_pack', 'portal_url')
         except ConfigParser.Error as e:
             die("--portal-url isn't specified on the command line and "
@@ -360,6 +359,35 @@ def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
                     'Failed to save access token in system keyring. '
                     'Install the Python "keyring" package.')
             yield token
+
+
+def read_stbt_conf(root):
+    """
+    git for Windows converts symlinks into normal files, but we still need to
+    traverse them for the purposes of loading .stbt.conf.
+    """
+    root = os.path.abspath(root)
+    cp = ConfigParser.SafeConfigParser()
+    filename = os.path.join(root, '.stbt.conf')
+    for _ in range(10):
+        try:
+            cp.read(filename)
+            return os.path.relpath(filename, root), cp
+        except ConfigParser.MissingSectionHeaderError:
+            if os.name == "posix":
+                # POSIX systems can support symlinks so something else must have
+                # gone wrong.
+                raise
+            with open(filename) as f:
+                link = f.read()
+            filename = os.path.normpath(os.path.join(
+                os.path.dirname(filename), link))
+            if not filename.startswith(root):
+                raise Exception("Traversing .stbt.conf symlinks failed: "
+                                "symlink points outside of test-pack")
+
+    raise Exception(
+        "Traversing .stbt.conf symlinks failed: Symlink depth too great")
 
 
 class Result(object):
