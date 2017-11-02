@@ -1,6 +1,13 @@
 #!/usr/bin/env python2
 
+"""Command-line tool for interacting with the Stb-tester Portal's REST API.
+
+Copyright 2017 Stb-tester.com Ltd. <support@stb-tester.com>
+Released under the MIT license.
+"""
+
 import argparse
+import ConfigParser
 import logging
 import os
 import shutil
@@ -8,9 +15,10 @@ import subprocess
 import sys
 import tempfile
 import time
-from ConfigParser import SafeConfigParser
 from contextlib import contextmanager
+from textwrap import dedent
 
+# Third-party libraries. Keep this list to a minimum to ease deployment.
 import requests
 
 
@@ -18,72 +26,172 @@ logger = logging.getLogger("stbt_rig")
 
 
 def main(argv):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--portal-url")
+    parser = argparse.ArgumentParser(
+        description="Command-line tool for interacting with the Stb-tester "
+        "Portal's REST API.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=dedent("""\
+            AUTHENTICATION:
+              blah blah
+              See https://stb-tester.com/manual/rest-api-v2#authentication
 
-    # Shouldn't pass auth token on command line because it would be visible in
+            INTERACTIVE MODE:
+              blah blah
+
+            JENKINS INTEGRATION:
+              blah blah
+
+                  ./stbt_rig.py \\
+                    --node-id=stb-tester-00044b80ebeb \\
+                    run tests/roku.py::test_entering_the_settings_menu \\
+                        tests/roku.py::test_launching_iplayer_content
+
+        """))
+
+    parser.add_argument(
+        "--portal-url", metavar="https://COMPANYNAME.stb-tester.com",
+        help="""Base URL of your Stb-tester Portal. You can specify it on the
+        command line or as "portal_url" in the [test_pack] section of
+        .stbt.conf. We look for .stbt.conf in the current working
+        directory.""")
+
+    # Can't pass auth token on command line because it would be visible in
     # /proc. Pass it in a file instead.
     parser.add_argument(
-        "--portal-auth-file",
-        help="name of file containing the HTTP REST API authentication token")
+        "--portal-auth-file", metavar="FILENAME",
+        help="""File containing the HTTP REST API authentication token.
+        See the AUTHENTICATION section below.""")
 
-    parser.add_argument("--node-id")
-    parser.add_argument("--git-remote", default="origin")
+    parser.add_argument(
+        "--node-id", metavar="stb-tester-abcdef123456",
+        help="""Which Stb-tester node to execute the COMMAND on. The node ID is
+        labelled on the physical Stb-tester node, and it is also shown in the
+        Stb-tester Portal.""")
 
-    parser.add_argument("-v", "--verbose", action="count", dest="verbosity")
+    parser.add_argument(
+        "--git-remote", metavar="NAME", default="origin",
+        help="""Which git remote to push to. Defaults to "origin" (this is the
+        default name that git creates when you did the original "git clone" of
+        the test-pack repository). This is only used by the commands that need
+        to push temporary snapshots to git: that is, "run" and "press" when
+        "--mode=interactive".""")
 
-    sub = parser.add_subparsers(dest="command")
-    run_parser = sub.add_parser('run', help="Run a test-case")
+    parser.add_argument(
+        "--mode", choices=["auto", "interactive", "jenkins"], default="auto",
+        help="""See the sections INTERACTIVE MODE and JENKINS INTEGRATION
+        below. This defaults to "auto", which detects whether or not it is
+        being run inside Jenkins.""")
+
+    parser.add_argument(
+        "-v", "--verbose", action="count", dest="verbosity", default=0,
+        help="""Specify once to enable INFO logging, twice for DEBUG.""")
+
+    subcommands = parser.add_subparsers(
+        dest="command", title="COMMANDS", metavar="COMMAND",
+        description=dedent("""\
+            Note: Run "./stbt_rig.py COMMAND -h" to see the additional
+            parameters for each COMMAND."""))
+
+    run_parser = subcommands.add_parser("run", help="Run test-cases")
     run_parser.add_argument(
         "--force", action="store_true",
-        help=("Don't fail if the node is in use, interrupt the existing job "
-              "instead"))
-    run_parser.add_argument("--soak", action="store_true")
+        help="""Stop an existing job first (otherwise this script will fail if
+        the Stb-tester node is busy)""")
+    run_parser.add_argument(
+        "--test-pack-revision", metavar="GIT_SHA", help="""Git commit SHA in
+        the test-pack repository identifying the version of the tests to run.
+        Can also be the name of a git branch or tag. In interactive mode this
+        defaults to a snapshot of your current working directory. In jenkins
+        mode this defaults to "master".""")
+    run_parser.add_argument(
+        "--remote-control", metavar="NAME", help="""The remote control infrared
+        configuration to use when running the tests. This should match the name
+        of a remote control configuration file in your test-pack git
+        repository. For example if your test-pack has
+        "config/remote-control/roku.lircd.conf" then you should specify "roku".
+        If not specified here, you must specify
+        "test_pack.default_remote_control" in the test-pack's .stbt.conf""")
+    run_parser.add_argument(
+        "--category", metavar="NAME", help="""Category to save the test-results
+        in. When you are viewing test results you can filter by this string. In
+        interactive mode this defaults to "USERNAME/snapshot". In jenkins mode
+        this defaults to the Jenkins job name.""")
+    run_parser.add_argument(
+        "--soak", action="store_true", help="""Run the testcases forever until
+        you interrupt them by pressing Control-C.""")
+    run_parser.add_argument(
+        "--shuffle", action="store_true", help="""Randomise the order in which
+        the tests are run. If "--soak" is also specified, this will prefer
+        to run the faster test cases more often.""")
+    run_parser.add_argument(
+        "-t", "--tag", action="append", dest="tags", default=[],
+        metavar="NAME=VALUE", help="""Tags are passed to the test scripts in
+        sys.argv and are recorded alongside the test-results. "--tag" can be
+        specified more than once.""")
+    run_parser.add_argument(
+        "test_cases", nargs='+', metavar="TESTCASE",
+        help="""One or more tests to run. Test names have the form
+        FILENAME::FUNCTION_NAME where FILENAME is given relative to the root of
+        the test-pack repository and FUNCTION_NAME identifies a Python function
+        within that file; for example
+        "tests/my_test.py::test_that_blah_dee_blah".""")
 
-    run_group = run_parser.add_mutually_exclusive_group(required=True)
-    run_group.add_argument("test_case", nargs='?')
-    run_group.add_argument("-c")
-    ss_parser = sub.add_parser('screenshot', help="Save a screenshot to disk")
-    ss_parser.add_argument("filename", default="screenshot.png", nargs='?')
+    screenshot_parser = subcommands.add_parser(
+        "screenshot", help="Save a screenshot to disk")
+    screenshot_parser.add_argument(
+        "filename", default="screenshot.png", nargs='?',
+        help="Output filename. Defaults to %(default)s")
+
     args = parser.parse_args(argv[1:])
 
-    logging.basicConfig(level=logging.WARNING - args.verbosity * 10)
+    logging.basicConfig(
+        format="%(filename)s: %(levelname)s: %(message)s",
+        level=logging.WARNING - args.verbosity * 10)
 
-    config_parser = SafeConfigParser()
-    config_parser.read('.stbt.conf')
+    if args.mode == "auto":
+        if "JENKINS_HOME" in os.environ:
+            args.mode = "jenkins"
+        else:
+            args.mode = "interactive"
 
-    portal_url = args.portal_url or config_parser.get('test_pack', 'portal_url')
-    node_id = args.node_id or config_parser.get('test_pack', 'node_id')
+    if not args.portal_url:
+        try:
+            config_parser = ConfigParser.SafeConfigParser()
+            config_parser.read('.stbt.conf')
+            args.portal_url = config_parser.get('test_pack', 'portal_url')
+        except ConfigParser.Error as e:
+            die("--portal-url isn't specified on the command line and "
+                "test_pack.portal_url isn't specified in .stbt.conf: %s", e)
+
+    if not args.node_id:
+        die("argument --node-id is required")
 
     testpack = TestPack(remote=args.git_remote, verbosity=args.verbosity)
 
-    for portal_auth_token in try_portal_auth_tokens(
-            args.portal_auth_file, portal_url):
+    for portal_auth_token in iter_portal_auth_tokens(
+            args.portal_url, args.portal_auth_file, args.mode):
 
-        portal = Portal(portal_url, portal_auth_token)
-        node = Node(portal, node_id)
+        portal = Portal(args.portal_url, portal_auth_token)
+        node = Node(portal, args.node_id)
 
         try:
             if args.command == "run":
                 return cmd_run(args, testpack, node)
             elif args.command == "screenshot":
                 return cmd_screenshot(args, node)
-            else:
-                raise AssertionError(
-                    "Unreachable: Unknown command %r." % args.command)
-            break
+            assert False, "Unreachable: Unknown command %r" % args.command
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 403:
-                # Unauthorised, try again, but with a new password
-                pass
+                # Unauthorised. Try again, but with a new password.
+                logger.error('Authentication failure with token "...%s"',
+                             portal_auth_token[-8:])
             else:
                 message = "stbt-rig: HTTP %i Error: %s" % (
                     e.response.status_code, e.response.text)
                 if hasattr(e, "request"):
                     message += " during %s %s" % (
                         e.request.method, e.request.url)  # pylint:disable=no-member
-                sys.stderr.write(message + "\n")
-                return 1
+                die(message)
 
 
 def cmd_run(args, testpack, node):
@@ -104,11 +212,27 @@ def cmd_screenshot(args, node):
     return 0
 
 
-def try_portal_auth_tokens(portal_auth_file, portal_url):
+def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
     if portal_auth_file:
-        with open(portal_auth_file) as f:
-            yield f.read().strip()
-            return
+        try:
+            with open(portal_auth_file) as f:
+                yield f.read().strip()
+        except IOError as e:
+            # NB. str(e) includes the filename
+            die("Failed to read portal auth file: %s" % e)
+        return
+
+    if mode == "jenkins":
+        token = os.environ.get("STBT_AUTH_TOKEN")
+        if token:
+            yield token
+        else:
+            die("No authentication token specified. Use the Jenkins "
+                "Credentials Binding plugin to provide the authentication "
+                "token in the environment variable STBT_AUTH_TOKEN")
+        return
+
+    assert mode == "interactive", "Unreachable: Unknown mode %s" % mode
 
     while True:
         keyring = None
@@ -126,11 +250,10 @@ def try_portal_auth_tokens(portal_auth_file, portal_url):
             if keyring is not None:
                 keyring.set_password(portal_url, "", token)
             else:
-                sys.stderr.write(
-                    "Tip: Install python package \"keyring\" to save this "
-                    "token for next time.\n")
+                logger.warning(
+                    'Failed to save authentication token in system keyring. '
+                    'Install the Python "keyring" package.')
             yield token
-        sys.stderr.write("Authentication Failure\n")
 
 
 class Result(object):
@@ -370,8 +493,7 @@ class TestPack(object):
         if extra_env:
             env.update(extra_env)
 
-        if self.verbosity >= 1:
-            sys.stderr.write('+git %s\n' % " ".join(cmd))
+        logger.debug('+git %s', " ".join(cmd))
 
         return call(["git"] + cmd, cwd=self.root, env=env, **kwargs)
 
@@ -418,7 +540,7 @@ class TestPack(object):
         self._git(
             ['push'] + options +
             [self.remote,
-             '%s:refs/heads/%s/wip-snapshot' % (
+             '%s:refs/heads/%s/snapshot' % (
                  commit_sha, self.user_branch_prefix)])
         return commit_sha
 
@@ -430,6 +552,11 @@ def named_temporary_directory(suffix='', prefix='tmp', dir=None):
         yield dirname
     finally:
         shutil.rmtree(dirname)
+
+
+def die(message, *args):
+    logger.error(message, *args)
+    sys.exit(1)
 
 
 if __name__ == '__main__':
