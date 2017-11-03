@@ -234,16 +234,16 @@ def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
 
     assert mode == "interactive", "Unreachable: Unknown mode %s" % mode
 
-    while True:
-        keyring = None
-        try:
-            import keyring
-            out = keyring.get_password(portal_url, "")
-            if out:
-                yield out
-        except ImportError:
-            pass
+    keyring = None
+    try:
+        import keyring
+        out = keyring.get_password(portal_url, "")
+        if out:
+            yield out
+    except ImportError:
+        pass
 
+    while True:
         sys.stderr.write('Enter Token for portal %r: ' % portal_url)
         token = sys.stdin.readline().strip()
         if token:
