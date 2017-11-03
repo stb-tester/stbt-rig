@@ -235,9 +235,21 @@ def cmd_run(args, node):
     job = node.run_tests(
         commit_sha, args.test_cases, args.remote_control, category,
         args.soak, args.shuffle, tags, args.force, await_completion=True)
-    result = job.list_results()[0]
-    result.print_logs()
-    if result.is_ok():
+
+    results = job.list_results()
+
+    if args.mode == "interactive":
+        for result in results:
+            print ""
+            print result.json["triage_url"]
+            result.print_logs()
+    elif args.mode == "jenkins":
+        # Record results in XML format for the Jenkins JUnit plugin
+        results_xml = job.list_results_xml()
+        with open("stbt-results.xml", "w") as f:
+            f.write(results_xml)
+
+    if all(result.is_ok() for result in results):
         return 0
     else:
         return 1
@@ -356,6 +368,12 @@ class TestJob(object):
             '/api/v2/results', params={'filter': 'job:%s' % self.job_uid})
         r.raise_for_status()
         return [Result(self.portal, x) for x in r.json()]
+
+    def list_results_xml(self):
+        r = self.portal._get(
+            '/api/v2/results.xml', params={'filter': 'job:%s' % self.job_uid})
+        r.raise_for_status()
+        return r.content
 
     def get_status(self):
         if self._json.get('status') == 'exited':
