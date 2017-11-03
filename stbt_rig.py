@@ -223,6 +223,14 @@ def cmd_run(args, node):
             assert False, "Unreachable: Unknown mode %r" % args.mode
 
     tags = {}
+    if args.mode == "jenkins":
+        # Record Jenkins environment variables as tags.
+        # GIT_COMMIT or SVN_REVISION will refer to the repo of the STB software
+        # being tested in CI, rather than the test-pack repo.
+        for v in ["BUILD_ID", "BUILD_URL", "GIT_COMMIT", "JOB_NAME",
+                  "SVN_REVISION"]:
+            if os.environ.get(v):
+                tags["jenkins/%s" % v] = os.environ[v]
     for tag in args.tags:
         try:
             name, value = tag.split("=", 1)
