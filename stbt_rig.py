@@ -190,6 +190,8 @@ def main(argv):
                     message += " during %s %s" % (
                         e.request.method, e.request.url)  # pylint:disable=no-member
                 die(message)
+        except NodeBusyException as e:
+            die(str(e))
 
     # Authentication error and no further tokens
     return 1
