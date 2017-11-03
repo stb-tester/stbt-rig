@@ -33,19 +33,50 @@ def main(argv):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=dedent("""\
             AUTHENTICATION:
-              blah blah
-              See https://stb-tester.com/manual/rest-api-v2#authentication
+              Go to the Stb-tester Portal in your web browser and create an
+              access token. See
+              https://stb-tester.com/manual/rest-api-v2#authentication
+
+              When you run this script the first time, you will be prompted to
+              type in the access token. If you have the Python "keyring"
+              package installed, we will save the token in the secure password
+              storage provided by your operating system, so that you don't have
+              to type it in again.
+
+              You can also save the access token to a file (don't commit the
+              file to the git repository!) and give the filename with
+              --portal-auth-file.
+
+              In Jenkins you can use the Credentials Binding plugin to pass the
+              access token in an environment variable. See the Jenkins
+              documentation below.
 
             INTERACTIVE MODE:
-              blah blah
+              In interactive mode (the default mode if not running inside a
+              Jenkins job) the "run" command takes a snapshot of your current
+              directory and pushes it to the branch YOUR_USERNAME/snapshot on
+              GitHub, so that you don't have to make lots of temporary git
+              commits to debug your test scripts.
 
             JENKINS INTEGRATION:
-              blah blah
+              We automatically detect if we are running inside a Jenkins job.
+              If so, we enable the following behaviours:
 
-                  ./stbt_rig.py \\
-                    --node-id=stb-tester-00044b80ebeb \\
-                    run tests/roku.py::test_entering_the_settings_menu \\
-                        tests/roku.py::test_launching_iplayer_content
+              * Read the access token from $STBT_AUTH_TOKEN environment
+                variable.
+              * Record various Jenkins parameters as "tags" in the Stb-tester
+                results:
+                - jenkins/JOB_NAME
+                - jenkins/BUILD_ID
+                - jenkins/BUILD_URL
+                - jenkins/GIT_COMMIT
+                - jenkins/SVN_REVISION
+              * Write test results in JUnit format to "stbt-results.xml" for
+                the Jenkins JUnit plugin.
+              * Stop the tests if you press the "stop" button in Jenkins.
+
+              For instructions on how to configure your Jenkins job see
+              https://stb-tester.com/manual/continuous-integration
 
         """))
 
@@ -60,8 +91,8 @@ def main(argv):
     # /proc. Pass it in a file instead.
     parser.add_argument(
         "--portal-auth-file", metavar="FILENAME",
-        help="""File containing the HTTP REST API authentication token.
-        See the AUTHENTICATION section below.""")
+        help="""File containing the HTTP REST API access token. See the
+        AUTHENTICATION section below.""")
 
     parser.add_argument(
         "--node-id", metavar="stb-tester-abcdef123456",
@@ -302,9 +333,9 @@ def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
         if token:
             yield token
         else:
-            die("No authentication token specified. Use the Jenkins "
-                "Credentials Binding plugin to provide the authentication "
-                "token in the environment variable STBT_AUTH_TOKEN")
+            die("No access token specified. Use the Jenkins Credentials "
+                "Binding plugin to provide the access token in the "
+                "environment variable STBT_AUTH_TOKEN")
         return
 
     assert mode == "interactive", "Unreachable: Unknown mode %s" % mode
@@ -319,14 +350,14 @@ def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
         pass
 
     while True:
-        sys.stderr.write('Enter Token for portal %r: ' % portal_url)
+        sys.stderr.write('Enter Access Token for portal %s: ' % portal_url)
         token = sys.stdin.readline().strip()
         if token:
             if keyring is not None:
                 keyring.set_password(portal_url, "", token)
             else:
                 logger.warning(
-                    'Failed to save authentication token in system keyring. '
+                    'Failed to save access token in system keyring. '
                     'Install the Python "keyring" package.')
             yield token
 

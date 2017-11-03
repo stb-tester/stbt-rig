@@ -58,8 +58,8 @@ Configuration:
         [test-pack]
         portal_url = https://COMPANYNAME.stb-tester.com
 
-2. Generate auth token.  See [Authentication] in the Stb-tester REST API
-   documentation.  You will need to enter this the first time you run the
+2. Generate access token. See [Authentication] in the Stb-tester REST API
+   documentation. You will need to enter this the first time you run the
    program.
 
 [Authentication]: https://stb-tester.com/manual/rest-api-v2#authentication
@@ -79,7 +79,7 @@ public API is the command-line interface.
     * Liberal MIT licence to remove any barriers to deployment.
     * It should have as few required dependencies as possible.  Currently it
       only requires `requests` and a `git` installation, with an
-      optional dependency on `keyring` for persisting the auth token.
+      optional dependency on `keyring` for persisting the access token.
 * Completeness - The whole of the stb-tester HTTP REST API should be exposed
 * Transparency - The Python API is intended to roughly have a 1 to 1
   correspondence with the REST API
