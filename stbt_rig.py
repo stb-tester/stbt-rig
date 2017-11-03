@@ -196,13 +196,17 @@ def main(argv):
 
 
 def cmd_run(args, node):
+    if args.mode == "interactive":
+        username = node.portal._get("/api/v2/user").json()["login"]
+        branch_name = "%s/snapshot" % username
+
     if args.test_pack_revision:
         commit_sha = args.test_pack_revision
     else:
         if args.mode == "interactive":
             testpack = TestPack(remote=args.git_remote,
                                 verbosity=args.verbosity)
-            commit_sha = testpack.push_git_snapshot()
+            commit_sha = testpack.push_git_snapshot(branch_name)
         elif args.mode == "jenkins":
             commit_sha = "master"
         else:
@@ -212,7 +216,7 @@ def cmd_run(args, node):
         category = args.category
     else:
         if args.mode == "interactive":
-            ...
+            category = branch_name
         elif args.mode == "jenkins":
             category = os.environ["JOB_NAME"]
         else:
@@ -501,18 +505,12 @@ class NodeBusyException(Exception):
 
 
 class TestPack(object):
-    def __init__(self, root=None, remote="origin", user_branch_prefix=None,
-                 verbosity=0):
+    def __init__(self, root=None, remote="origin", verbosity=0):
         if root is None:
             root = os.curdir
         self.root = root
         self.remote = remote
         self.verbosity = verbosity
-
-        if user_branch_prefix is None:
-            user_branch_prefix = self._git([
-                'config', 'user.email']).strip().split('@')[0]
-        self.user_branch_prefix = user_branch_prefix
 
     def _git(self, cmd, capture_output=True, extra_env=None, **kwargs):
         if capture_output:
@@ -563,7 +561,7 @@ class TestPack(object):
                 ['commit-tree', write_tree, '-p', base_commit, '-m',
                  "snapshot"]).strip()
 
-    def push_git_snapshot(self):
+    def push_git_snapshot(self, branch):
         commit_sha = self.take_snapshot()
         options = ['--force']
         if self.verbosity <= 0:
@@ -571,8 +569,7 @@ class TestPack(object):
         self._git(
             ['push'] + options +
             [self.remote,
-             '%s:refs/heads/%s/snapshot' % (
-                 commit_sha, self.user_branch_prefix)])
+             '%s:refs/heads/%s' % (commit_sha, branch)])
         return commit_sha
 
 
