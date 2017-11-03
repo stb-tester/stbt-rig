@@ -193,6 +193,9 @@ def main(argv):
                         e.request.method, e.request.url)  # pylint:disable=no-member
                 die(message)
 
+    # Authentication error and no further tokens
+    return 1
+
 
 def cmd_run(args, testpack, node):
     commit_sha = testpack.push_git_snapshot()
