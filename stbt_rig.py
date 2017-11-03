@@ -11,6 +11,7 @@ import ConfigParser
 import logging
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -144,6 +145,10 @@ def main(argv):
 
     args = parser.parse_args(argv[1:])
 
+    signal.signal(signal.SIGINT, _exit)
+    signal.signal(signal.SIGTERM, _exit)
+    signal.signal(signal.SIGHUP, _exit)
+
     logging.basicConfig(
         format="%(filename)s: %(levelname)s: %(message)s",
         level=logging.WARNING - args.verbosity * 10)
@@ -195,6 +200,14 @@ def main(argv):
 
     # Authentication error and no further tokens
     return 1
+
+
+def _exit(signo, _):
+    logger.warning("Received %s. Stopping job.",
+                   {signal.SIGINT: "SIGINT", signal.SIGTERM: "SIGTERM",
+                    signal.SIGHUP: "SIGHUP"}[signo])
+    # Teardown is handled by TestJob.__exit__
+    sys.exit(0)
 
 
 def cmd_run(args, node):
