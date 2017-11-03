@@ -204,8 +204,7 @@ def cmd_run(args, node):
         commit_sha = args.test_pack_revision
     else:
         if args.mode == "interactive":
-            testpack = TestPack(remote=args.git_remote,
-                                verbosity=args.verbosity)
+            testpack = TestPack(remote=args.git_remote)
             commit_sha = testpack.push_git_snapshot(branch_name)
         elif args.mode == "jenkins":
             commit_sha = "master"
@@ -530,12 +529,11 @@ class NodeBusyException(Exception):
 
 
 class TestPack(object):
-    def __init__(self, root=None, remote="origin", verbosity=0):
+    def __init__(self, root=None, remote="origin"):
         if root is None:
             root = os.curdir
         self.root = root
         self.remote = remote
-        self.verbosity = verbosity
 
     def _git(self, cmd, capture_output=True, extra_env=None, **kwargs):
         if capture_output:
@@ -589,7 +587,7 @@ class TestPack(object):
     def push_git_snapshot(self, branch):
         commit_sha = self.take_snapshot()
         options = ['--force']
-        if self.verbosity <= 0:
+        if not logger.isEnabledFor(logging.DEBUG):
             options.append('--quiet')
         self._git(
             ['push'] + options +
