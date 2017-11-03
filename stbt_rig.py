@@ -166,8 +166,6 @@ def main(argv):
     if not args.node_id:
         die("argument --node-id is required")
 
-    testpack = TestPack(remote=args.git_remote, verbosity=args.verbosity)
-
     for portal_auth_token in iter_portal_auth_tokens(
             args.portal_url, args.portal_auth_file, args.mode):
 
@@ -176,7 +174,7 @@ def main(argv):
 
         try:
             if args.command == "run":
-                return cmd_run(args, testpack, node)
+                return cmd_run(args, node)
             elif args.command == "screenshot":
                 return cmd_screenshot(args, node)
             assert False, "Unreachable: Unknown command %r" % args.command
@@ -197,11 +195,42 @@ def main(argv):
     return 1
 
 
-def cmd_run(args, testpack, node):
-    commit_sha = testpack.push_git_snapshot()
+def cmd_run(args, node):
+    if args.test_pack_revision:
+        commit_sha = args.test_pack_revision
+    else:
+        if args.mode == "interactive":
+            testpack = TestPack(remote=args.git_remote,
+                                verbosity=args.verbosity)
+            commit_sha = testpack.push_git_snapshot()
+        elif args.mode == "jenkins":
+            commit_sha = "master"
+        else:
+            assert False, "Unreachable: Unknown mode %r" % args.mode
+
+    if args.category:
+        category = args.category
+    else:
+        if args.mode == "interactive":
+            ...
+        elif args.mode == "jenkins":
+            category = os.environ["JOB_NAME"]
+        else:
+            assert False, "Unreachable: Unknown mode %r" % args.mode
+
+    tags = {}
+    for tag in args.tags:
+        try:
+            name, value = tag.split("=", 1)
+        except ValueError:
+            die("Invalid --tag argument: %s (should be NAME=VALUE)" % tag)
+        if name in tags:
+            die("Duplicate --tag name: %s" % name)
+        tags[name] = value
+
     job = node.run_tests(
-        commit_sha, [args.test_case], await_completion=True, force=args.force,
-        soak=args.soak)
+        commit_sha, args.test_cases, args.remote_control, category,
+        args.soak, args.shuffle, tags, args.force, await_completion=True)
     result = job.list_results()[0]
     result.print_logs()
     if result.is_ok():
@@ -408,7 +437,7 @@ class Portal(object):
     def run_tests(
             self, node_id, test_pack_revision, test_cases,
             remote_control=None, category=None, soak=None, shuffle=None,
-            force=False, timeout=None, await_completion=False):
+            tags=None, force=False, timeout=None, await_completion=False):
         if force:
             Node(self, node_id).stop_current_job()
 
@@ -421,6 +450,8 @@ class Portal(object):
             kwargs['soak'] = "run forever"
         if shuffle is not None:
             kwargs['shuffle'] = shuffle
+        if tags is not None:
+            kwargs['tags'] = tags
 
         kwargs["node_id"] = node_id
         kwargs["test_pack_revision"] = test_pack_revision
