@@ -258,6 +258,9 @@ def cmd_run(args, node):
         with open("stbt-results.xml", "w") as f:
             f.write(results_xml)
 
+    print "View these test results at: %s/app/#/results?filter=job:%s" % (
+        node.portal.url(), job.job_uid)
+
     if all(result.is_ok() for result in results):
         return 0
     else:
