@@ -184,7 +184,7 @@ def main(argv):
                 logger.error('Authentication failure with token "...%s"',
                              portal_auth_token[-8:])
             else:
-                message = "stbt-rig: HTTP %i Error: %s" % (
+                message = "HTTP %i Error: %s" % (
                     e.response.status_code, e.response.text)
                 if hasattr(e, "request"):
                     message += " during %s %s" % (
