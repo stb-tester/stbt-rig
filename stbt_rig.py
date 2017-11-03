@@ -330,9 +330,8 @@ class Result(object):
 
 
 class TestJob(object):
-    class Status(object):
-        RUNNING = "running"
-        EXITED = "exited"
+    RUNNING = "running"
+    EXITED = "exited"
 
     def __init__(self, portal, job_uid=None, job_json=None):
         if job_uid is None and job_json is None:
@@ -350,7 +349,7 @@ class TestJob(object):
         self.stop()
 
     def stop(self):
-        if self.get_status() != TestJob.Status.EXITED:
+        if self.get_status() != TestJob.EXITED:
             self._post('/stop').raise_for_status()
 
     def await_completion(self, timeout=None):
@@ -362,7 +361,7 @@ class TestJob(object):
             if time.time() > end_time:
                 raise TimeoutException(
                     "Timeout waiting for job %s to complete" % self.job_uid)
-            if self.get_status() != TestJob.Status.RUNNING:
+            if self.get_status() != TestJob.RUNNING:
                 logger.debug("Job complete %s", self.job_uid)
                 return
             try:
@@ -387,9 +386,9 @@ class TestJob(object):
         if self._json.get('status') == 'exited':
             # If we were "exited" in the past, then we'll still be "exited" now:
             # Save making another HTTP request
-            return TestJob.Status.EXITED
+            return TestJob.EXITED
         self._update()
-        return TestJob.Status(self._json['status'])
+        return self._json['status']
 
     def _get(self, path="", **kwargs):
         r = self.portal._get(
@@ -424,7 +423,7 @@ class Node(object):
         response = self._get('job')
         response.raise_for_status()
         job = TestJob(self.portal, job_json=response.json())
-        if job.get_status() == TestJob.Status.RUNNING:
+        if job.get_status() == TestJob.RUNNING:
             job.stop()
 
     def press(self, key, test_pack_revision=None, remote_control=None):
