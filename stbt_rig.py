@@ -462,9 +462,6 @@ class Portal(object):
                 "Couldn't run test-job on node %s.  Node is currently in use.  "
                 "Specify --force to stop current job before running new one" %
                 node_id)
-        if not result.ok:
-            logger.warning("Running tests failed.  Server said:\n%s",
-                           result.content)
         result.raise_for_status()
         job = TestJob(self, job_json=result.json())
 
