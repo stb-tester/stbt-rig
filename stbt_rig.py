@@ -239,6 +239,8 @@ def cmd_run(args, node):
             die("Duplicate --tag name: %s" % name)
         tags[name] = value
 
+    logger.info("Running tests...")
+
     job = node.run_tests(
         commit_sha, args.test_cases, args.remote_control, category,
         args.soak, args.shuffle, tags, args.force, await_completion=True)
@@ -589,6 +591,7 @@ class TestPack(object):
         options = ['--force']
         if not logger.isEnabledFor(logging.DEBUG):
             options.append('--quiet')
+        logger.info("Pushing git snapshot to %s/%s", self.remote, branch)
         self._git(
             ['push'] + options +
             [self.remote,
