@@ -179,7 +179,7 @@ def main(argv):
     signal.signal(signal.SIGINT, _exit)
     signal.signal(signal.SIGTERM, _exit)
     if hasattr(signal, "SIGHUP"):
-        signal.signal(signal.SIGHUP, _exit)
+        signal.signal(signal.SIGHUP, _exit)  # pylint:disable=no-member
 
     logging.basicConfig(
         format="%(filename)s: %(levelname)s: %(message)s",
