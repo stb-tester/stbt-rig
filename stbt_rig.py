@@ -234,9 +234,9 @@ def main(argv):
 
 
 def _exit(signo, _):
-    logger.warning("Received %s. Stopping job.",
-                   {signal.SIGINT: "SIGINT", signal.SIGTERM: "SIGTERM",
-                    signal.SIGHUP: "SIGHUP"}[signo])
+    name = next(k for k, v in signal.__dict__.iteritems()
+                if v == signo and "_" not in k)
+    logger.warning("Received %s. Stopping job.", name)
     # Teardown is handled by TestJob.__exit__
     sys.exit(0)
 
