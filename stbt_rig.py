@@ -178,7 +178,8 @@ def main(argv):
 
     signal.signal(signal.SIGINT, _exit)
     signal.signal(signal.SIGTERM, _exit)
-    signal.signal(signal.SIGHUP, _exit)
+    if hasattr(signal, "SIGHUP"):
+        signal.signal(signal.SIGHUP, _exit)
 
     logging.basicConfig(
         format="%(filename)s: %(levelname)s: %(message)s",
