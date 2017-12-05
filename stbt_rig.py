@@ -243,7 +243,9 @@ def _exit(signo, _):
 
 def cmd_run(args, node):
     if args.mode == "interactive":
-        username = node.portal._get("/api/v2/user").json()["login"]
+        response = node.portal._get("/api/v2/user")
+        response.raise_for_status()
+        username = response.json()["login"]
         branch_name = "%s/snapshot" % username
 
     if args.test_pack_revision:
