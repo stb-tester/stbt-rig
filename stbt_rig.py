@@ -81,6 +81,10 @@ def main(argv):
         """))
 
     parser.add_argument(
+        "-C", metavar="PATH", help="Change to directory PATH before doing "
+        "anything else.")
+
+    parser.add_argument(
         "--portal-url", metavar="https://COMPANYNAME.stb-tester.com",
         help="""Base URL of your Stb-tester Portal. You can specify it on the
         command line or as "portal_url" in the [test_pack] section of
@@ -184,6 +188,9 @@ def main(argv):
     logging.basicConfig(
         format="%(filename)s: %(levelname)s: %(message)s",
         level=logging.WARNING - args.verbosity * 10)
+
+    if args.C:
+        os.chdir(args.C)
 
     if args.mode == "auto":
         if "JENKINS_HOME" in os.environ:
