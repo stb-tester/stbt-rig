@@ -10,10 +10,28 @@ Command-line tool for interacting with the Stb-tester Portal's [REST API].
 
 ## Interactive use
 
-`./stbt_rig.py --node-id=stb-tester-e5a091e40de1 run tests/file.py::test_name`
-will submit your local test-pack directory to run on an Stb-tester node. This
-saves you having to make lots of temporary git commits to debug your test
-scripts.
+stbt-rig makes it easier to do test-script development by testing your local
+code-changes on an Stb-tester node without having to make git commits or
+clicking in the web portal. It is a command-line application that runs on your
+development PC.
+
+For example run this:
+
+    ./stbt_rig.py --node-id=stb-tester-e5a091e40de1 \
+        run tests/file.py::test_name
+
+This will:
+
+1. Commit your changes to a temporary git branch and push them to github;
+2. Run the test via the Stb-tester Portal's REST API;
+3. Grab the result and print the output locally.
+
+This saves you a multi-step manual process, and it removes the need to make
+lots of tiny git commits while iterating on test-scripts.
+
+stbt-rig will run on Windows, Mac OS or Linux. It depends on Python, git,
+python-requests, and optionally python-keyring for storing your access token.
+See "Installation" below for information on installing these dependencies.
 
 ## Jenkins integration
 
