@@ -66,6 +66,11 @@ Configuration:
 
 ## Design
 
+#### Command-line Client Goals
+
+* Convenience for test-script development
+* Simple and robust CI system integration
+
 #### Python API Goals
 
 Note: The Python API exposed by this module isn't stable; for now the only
@@ -85,38 +90,3 @@ public API is the command-line interface.
   correspondence with the REST API
 * Robustness - The library should help with mitigate common network problems
     * Should include retries for HTTP failures
-
-#### Command-line Client Goals
-
-* Convenience for test-script development
-* Simple and robust CI system integration
-
-## TODO
-
-* [ ] Grab thumbnail - `/api/v2/nodes/(node_id)/thumbnail.jpg`
-* [ ] List test cases - `/api/v2/test_pack/<test_pack_sha>/test_case_names`
-* Run tests - `/api/v2/run_tests`
-    * [x] Single test-case
-    * [ ] Multiple test cases
-    * [ ] Specify remote control
-    * [ ] Specify category
-    * [x] Run tests in soak
-    * [ ] Shuffle
-    * [ ] Tags
-    * [x] Wait for completion
-    * [x] Set exit status
-* [ ] List results `/api/v2/results`
-    * [x] Get result of job we started
-    * [ ] Get result of other jobs/other search filters
-    * [ ] Save results in xUnit format
-* Get detailed information about a test run `/api/v2/results/(result_id)/`
-    * [ ] Download artifacts
-    * [ ] Artifact cache based on git sha headers?
-- [ ] Ensure that every REST API endpoint is covered
-- [ ] Add and publish API documentation
-- [ ] Decide on the best place to store REST API tokens
-- [ ] Add `requirements.txt` and publish on PyPI
-- [ ] Don't let `requests` leak though the API
-- [ ] Raise appropriate exceptions for REST API errors
-- [ ] Retry logic
-- [ ] API stability
