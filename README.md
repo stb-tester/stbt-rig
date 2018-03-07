@@ -15,10 +15,9 @@ code-changes on an Stb-tester node without having to make git commits or
 clicking in the web portal. It is a command-line application that runs on your
 development PC.
 
-For example run this:
+For example run this on your PC from your test-pack directory:
 
-    ./stbt_rig.py --node-id=stb-tester-e5a091e40de1 \
-        run tests/file.py::test_name
+    ./stbt_rig.py --node-id=stb-tester-e5a091e40de1 run tests/file.py::test_name
 
 This will:
 
