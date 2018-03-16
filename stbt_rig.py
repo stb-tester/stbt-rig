@@ -2,6 +2,9 @@
 
 """Command-line tool for interacting with the Stb-tester Portal's REST API.
 
+For more details, and to get the latest version of this script, see
+<https://github.com/stb-tester/stbt-rig>.
+
 Copyright 2017 Stb-tester.com Ltd. <support@stb-tester.com>
 Released under the MIT license.
 """
