@@ -93,6 +93,13 @@ def main(argv):
                 - bamboo.buildResultsUrl
                 - bamboo.planRepository.branchName
                 - bamboo.planRepository.revision
+              * Write test results in JUnit format to "stbt-results.xml"
+                suitable for Bamboo's "JUnit Parser" task.
+              * Stop the tests if you press "Stop build" in Bamboo.
+
+              For instructions on how to configure your Bamboo job see
+              https://stb-tester.com/manual/continuous-integration
+
         """))
 
     parser.add_argument(
