@@ -85,7 +85,7 @@ def main(argv):
               Similarly, we automatically detect if we are running from
               Bamboo (Atlassian's continuous integration server):
 
-              * Read the access token from bamboo.STBT_AUTH_TOKEN variable.
+              * Read the access token from bamboo.STBT_AUTH_PASSWORD variable.
               * Record the following Bamboo variables as "tags" in the
                 Stb-tester results:
                 - bamboo.buildPlanName
@@ -392,12 +392,12 @@ def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
         return
 
     if mode == "bamboo":
-        token = os.environ.get("bamboo_STBT_AUTH_TOKEN")
+        token = os.environ.get("bamboo_STBT_AUTH_PASSWORD")
         if token:
             yield token
         else:
             die("No access token specified. Provide the access token in the "
-                "variable bamboo.STBT_AUTH_TOKEN")
+                "variable bamboo.STBT_AUTH_PASSWORD")
         return
 
     assert mode == "interactive", "Unreachable: Unknown mode %s" % mode
