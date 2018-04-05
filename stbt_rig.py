@@ -740,12 +740,13 @@ class TestPack(object):
 
 
 @contextmanager
-def named_temporary_directory(suffix='', prefix='tmp', dir=None):
+def named_temporary_directory(suffix='', prefix='tmp', dir=None,
+                              ignore_errors=False):
     dirname = tempfile.mkdtemp(suffix, prefix, dir)
     try:
         yield dirname
     finally:
-        shutil.rmtree(dirname)
+        shutil.rmtree(dirname, ignore_errors=ignore_errors)
 
 
 def die(message, *args):
