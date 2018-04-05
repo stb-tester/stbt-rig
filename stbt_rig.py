@@ -699,12 +699,15 @@ class TestPack(object):
     def take_snapshot(self):
         status = [(x[0:2], x[3:])
                   for x in self._git(['status', '-z']).split('\0')]
-        for status_code, filename in status:
-            if status_code == '??':
-                logging.warning(
-                    'Snapshotting git repo: Ignoring untracked file %s.  '
-                    'Either add it (with git add) or add it to .gitignore',
-                    filename)
+        untracked_files = [filename for status_code, filename in status
+                           if status_code == "??"]
+        if untracked_files:
+            sys.stderr.write("stbt-rig: Warning: Ignoring untracked files:\n\n")
+            for filename in untracked_files:
+                sys.stderr.write("    %s\n" % filename)
+            sys.stderr.write(
+                '\nTo avoid this warning add untracked files (with "git add") '
+                'or add them to .gitignore\n')
 
         base_commit = self.get_sha(obj_type="commit")
 

@@ -69,7 +69,8 @@ def test_testpack_snapshot_contains_modifications(test_pack):
         assert cat("HEAD", 'moo') == "Hello!\n"
 
 
-def test_testpack_snapshot_with_untracked_files(test_pack):
+def test_testpack_snapshot_with_untracked_files(test_pack, capsys):
+    assert capsys.readouterr() == ("", "")
     with open("other", "w") as f:
         f.write("It's uncommitted\n")
 
@@ -78,3 +79,11 @@ def test_testpack_snapshot_with_untracked_files(test_pack):
         ss = test_pack.take_snapshot()
         # Untracked files aren't included in the snapshot:
         assert orig_sha == ss
+
+    assert capsys.readouterr() == ("", dedent("""\
+        stbt-rig: Warning: Ignoring untracked files:
+
+            other
+
+        To avoid this warning add untracked files (with "git add") or add them to .gitignore
+        """))
