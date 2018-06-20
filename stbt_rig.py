@@ -469,6 +469,17 @@ class Result(object):
     def is_ok(self):
         return self.json['result'] == "pass"
 
+    def download_artifact(self, filename):
+        r = self._portal._get('/api/v2/results/%s/artifacts/%s' % (
+            self.json['result_id'], filename))
+        r.raise_for_status()
+
+        f = tempfile.NamedTemporaryFile(prefix=filename + '~')
+        for c in r.iter_content():
+            f.write(c)
+        f.seek(0)
+        return f
+
 
 class TestJob(object):
     RUNNING = "running"
