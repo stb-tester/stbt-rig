@@ -142,6 +142,10 @@ def main(argv):
         being run inside Jenkins or Bamboo.""")
 
     parser.add_argument(
+        "--csv", metavar="FILENAME",
+        help="Also write test-results in CSV format to the specified file.")
+
+    parser.add_argument(
         "-v", "--verbose", action="count", dest="verbosity", default=0,
         help="""Specify once to enable INFO logging, twice for DEBUG.""")
 
@@ -357,6 +361,11 @@ def cmd_run(args, node):
         with open("stbt-results.xml", "w") as f:
             f.write(results_xml)
 
+    if args.csv:
+        results_csv = job.list_results_csv()
+        with open(args.csv, "w") as f:
+            f.write(results_csv)
+
     print "View these test results at: %s/app/#/results?filter=job:%s" % (
         node.portal.url(), job.job_uid)
 
@@ -469,17 +478,6 @@ class Result(object):
     def is_ok(self):
         return self.json['result'] == "pass"
 
-    def download_artifact(self, filename):
-        r = self._portal._get('/api/v2/results/%s/artifacts/%s' % (
-            self.json['result_id'], filename))
-        r.raise_for_status()
-
-        f = tempfile.NamedTemporaryFile(prefix=filename + '~')
-        for c in r.iter_content():
-            f.write(c)
-        f.seek(0)
-        return f
-
 
 class TestJob(object):
     RUNNING = "running"
@@ -531,6 +529,12 @@ class TestJob(object):
     def list_results_xml(self):
         r = self.portal._get(
             '/api/v2/results.xml', params={'filter': 'job:%s' % self.job_uid})
+        r.raise_for_status()
+        return r.content
+
+    def list_results_csv(self):
+        r = self.portal._get(
+            '/api/v2/results.csv', params={'filter': 'job:%s' % self.job_uid})
         r.raise_for_status()
         return r.content
 
