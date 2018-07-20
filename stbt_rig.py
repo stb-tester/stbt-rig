@@ -612,6 +612,7 @@ class Portal(object):
         self._auth_token = auth_token
         self.readonly = readonly
         self._session = requests.session()
+        self._session.headers.update({"User-Agent": "stbt-rig"})
 
     def url(self, endpoint=""):
         if endpoint.startswith(self._url):
