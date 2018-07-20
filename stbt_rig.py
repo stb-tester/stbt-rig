@@ -100,6 +100,27 @@ def main(argv):
               For instructions on how to configure your Bamboo job see
               https://stb-tester.com/manual/continuous-integration
 
+            GITLAB CI INTEGRATION:
+
+              We automatically detect if we are running inside a Gitlab CI job.
+              If so, we enable the following behaviours:
+
+              * Read the access token from $CI_BUILD_TOKEN environment variable.
+              * Record various Jenkins parameters as "tags" in the Stb-tester
+                results:
+                - gitlab/CI_JOB_ID
+                - gitlab/CI_COMMIT_SHA
+                - gitlab/CI_COMMIT_REF_NAME
+                - gitlab/CI_REPOSITORY_URL
+                - gitlab/CI_JOB_NAME
+                - gitlab/CI_JOB_STAGE
+                - gitlab/CI_PROJECT_URL
+                - gitlab/CI_ENVIRONMENT_NAME
+              * TODO: HOW DO RESULTS WORK IN GITLAB CI?
+              * TODO: HOW DOES STOPPING JOBS WORK IN GITLAB CI?
+
+              For instructions on how to configure your Gitlab job see
+              https://stb-tester.com/manual/continuous-integration
         """))
 
     parser.add_argument(
@@ -135,7 +156,8 @@ def main(argv):
         "--mode=interactive".""")
 
     parser.add_argument(
-        "--mode", choices=["auto", "bamboo", "interactive", "jenkins"],
+        "--mode",
+        choices=["auto", "bamboo", "gitlab", "interactive", "jenkins"],
         default="auto",
         help="""See the sections INTERACTIVE MODE and JENKINS INTEGRATION
         below. This defaults to "auto", which detects whether or not it is
@@ -224,6 +246,8 @@ def main(argv):
             args.mode = "jenkins"
         elif "bamboo_agentWorkingDirectory" in os.environ:
             args.mode = "bamboo"
+        elif "GITLAB_CI" in os.environ:
+            args.mode = "gitlab"
         else:
             args.mode = "interactive"
 
@@ -290,7 +314,7 @@ def cmd_run(args, node):
         if args.mode == "interactive":
             testpack = TestPack(remote=args.git_remote)
             commit_sha = testpack.push_git_snapshot(branch_name)
-        elif args.mode in ["bamboo", "jenkins"]:
+        elif args.mode in ["bamboo", "gitlab", "jenkins"]:
             # We assume that when in CI we're not in the git repo of the
             # test-pack, so run tests from master.
             commit_sha = "master"
@@ -306,6 +330,9 @@ def cmd_run(args, node):
             category = os.environ["JOB_NAME"]
         elif args.mode == "bamboo":
             category = os.environ["bamboo_shortJobName"]
+        elif args.mode == "gitlab":
+            category = (
+                os.environ.get("CI_JOB_NAME") or os.environ["CI_BUILD_NAME"])
         else:
             assert False, "Unreachable: Unknown mode %r" % args.mode
 
@@ -333,6 +360,25 @@ def cmd_run(args, node):
             value = os.environ.get(v.replace(".", "_"))
             if value:
                 tags[v] = value
+    elif args.mode == "gitlab":
+        # Record gitlab CI variables as Stb-tester tags.
+        # Gitlab CI changed the variables names in version 9.0 (released
+        # 2017-03-22).  We support both sets of names, but always record the
+        # new name.
+        # See https://docs.gitlab.com/ee/ci/variables/
+        #                    8.x name      9.0+ name
+        for k, old_key in [('CI_JOB_ID', 'CI_BUILD_ID'),
+                           ('CI_COMMIT_SHA', 'CI_BUILD_REF'),
+                           ('CI_COMMIT_REF_NAME', 'CI_BUILD_REF_NAME'),
+                           ('CI_REPOSITORY_URL', 'CI_BUILD_REPO'),
+                           ('CI_JOB_NAME', 'CI_BUILD_NAME'),
+                           ('CI_JOB_STAGE', 'CI_BUILD_STAGE'),
+                           ('CI_PROJECT_URL', None),
+                           ('CI_ENVIRONMENT_NAME', None)]:
+            value = os.environ.get(k) or (old_key and os.environ.get(old_key))
+            if value:
+                tags["gitlab/%s" % k] = value
+
     for tag in args.tags:
         try:
             name, value = tag.split("=", 1)
@@ -408,6 +454,14 @@ def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
             die("No access token specified. Provide the access token in the "
                 "variable bamboo.STBT_AUTH_PASSWORD")
         return
+
+    if mode == "gitlab":
+        token = os.environ.get("CI_BUILD_TOKEN")
+        if token:
+            yield token
+        else:
+            die("No access token specified. Provide the access token in the "
+                "variable CI_BUILD_TOKEN")
 
     assert mode == "interactive", "Unreachable: Unknown mode %s" % mode
 
