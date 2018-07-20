@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 """Command-line tool for interacting with the Stb-tester Portal's REST API.
 
