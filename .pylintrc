@@ -12,6 +12,7 @@ disable=
   locally-disabled,
   locally-enabled,
   missing-docstring,
+  no-else-return,
   protected-access,
   redefined-builtin,
   too-few-public-methods,
