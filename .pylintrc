@@ -29,3 +29,4 @@ disable=
 
 [FORMAT]
 max-line-length=80
+ignore-long-lines=https?://
