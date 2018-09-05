@@ -4,7 +4,7 @@ python:
 
 install:
 - cat /etc/os-release
-- pip install keyring pylint==1.5.2 pytest requests astroid==1.4.4
+- pip install keyring requests pytest pylint==1.9.3 astroid==1.6.5
 
 script:
 - pylint stbt_rig.py

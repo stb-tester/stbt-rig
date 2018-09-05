@@ -1,5 +1,5 @@
 install:
-  - cmd: python.exe -m pip install keyring pytest requests pylint==1.5.2 astroid==1.4.4
+  - cmd: python.exe -m pip install keyring requests pytest pylint==1.9.3 astroid==1.6.5
 
 build: off
 

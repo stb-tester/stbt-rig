@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# PYTHON_ARGCOMPLETE_OK
 
 """Command-line tool for interacting with the Stb-tester Portal's REST API.
 
@@ -13,6 +14,7 @@ import argparse
 import ConfigParser
 import logging
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -24,6 +26,13 @@ from textwrap import dedent
 
 # Third-party libraries. Keep this list to a minimum to ease deployment.
 import requests
+
+try:
+    # Bash tab-completion, if python-argcomplete is installed
+    from argcomplete import autocomplete
+except ImportError:
+    def autocomplete(*_args):
+        pass
 
 
 logger = logging.getLogger("stbt_rig")
@@ -124,7 +133,8 @@ def main(argv):
         "--node-id", metavar="stb-tester-abcdef123456",
         help="""Which Stb-tester node to execute the COMMAND on. The node ID is
         labelled on the physical Stb-tester node, and it is also shown in the
-        Stb-tester Portal.""")
+        Stb-tester Portal.""") \
+        .completer = _list_node_ids
 
     parser.add_argument(
         "--git-remote", metavar="NAME", default="origin",
@@ -197,7 +207,8 @@ def main(argv):
         FILENAME::FUNCTION_NAME where FILENAME is given relative to the root of
         the test-pack repository and FUNCTION_NAME identifies a Python function
         within that file; for example
-        "tests/my_test.py::test_that_blah_dee_blah".""")
+        "tests/my_test.py::test_that_blah_dee_blah".""") \
+        .completer = _list_test_cases
 
     screenshot_parser = subcommands.add_parser(
         "screenshot", help="Save a screenshot to disk")
@@ -205,6 +216,7 @@ def main(argv):
         "filename", default="screenshot.png", nargs='?',
         help="Output filename. Defaults to %(default)s")
 
+    autocomplete(parser)
     args = parser.parse_args(argv[1:])
 
     signal.signal(signal.SIGINT, _exit)
@@ -658,14 +670,13 @@ class Portal(object):
             job.await_completion(timeout=timeout)
             return job
 
-    def _get(self, endpoint, headers=None, *args, **kwargs):
+    def _get(self, endpoint, headers=None, **kwargs):
         if headers is None:
             headers = {}
         headers["Authorization"] = "token %s" % self._auth_token
-        return self._session.get(
-            self.url(endpoint), *args, headers=headers, **kwargs)
+        return self._session.get(self.url(endpoint), headers=headers, **kwargs)
 
-    def _post(self, endpoint, json=None, headers=None, *args, **kwargs):  # pylint:disable=redefined-outer-name
+    def _post(self, endpoint, json=None, headers=None, **kwargs):  # pylint:disable=redefined-outer-name
         from json import dumps
         if headers is None:
             headers = {}
@@ -677,8 +688,7 @@ class Portal(object):
         if json is not None:
             headers['Content-Type'] = 'application/json'
             kwargs['data'] = dumps(json)
-        r = self._session.post(
-            self.url(endpoint), headers=headers, *args, **kwargs)
+        r = self._session.post(self.url(endpoint), headers=headers, **kwargs)
         return r
 
 
@@ -756,6 +766,39 @@ class TestPack(object):
             [self.remote,
              '%s:refs/heads/%s' % (commit_sha, branch)])
         return commit_sha
+
+
+def _list_test_cases(prefix, **_kwargs):
+    """Used for command-line tab-completion."""
+
+    if "::" in prefix:
+        # List test-cases in the file.
+        filename = prefix.split("::")[0]
+        tests = []
+        for line in open(filename):
+            m = re.match(r"^def\s+(test_[a-zA-Z0-9_]+)", line)
+            if m:
+                tests.append(filename + "::" + m.group(1))
+        return tests
+
+    else:
+        # List files:
+        return [f + "::"
+                for f in subprocess.check_output(
+                    ["git", "ls-files", "tests/**.py"]).strip().split("\n")]
+
+
+def _list_node_ids(**_kwargs):
+    """Used for command-line tab-completion.
+
+    For lack of a better place too look, looks for configuration files in
+    config/test-farm -- see https://stb-tester.com/manual/advanced-configuration#node-specific-configuration-files
+    """
+
+    return [f[17:-5]
+            for f in subprocess.check_output(
+                ["git", "ls-files", "config/test-farm/stb-tester-*.conf"])
+            .strip().split("\n")]
 
 
 @contextmanager
