@@ -256,7 +256,7 @@ def main(argv):
 
     if not args.portal_url:
         try:
-            _, config_parser = read_stbt_conf(os.curdir)
+            _, config_parser = read_stbt_conf(find_test_pack_root())
             args.portal_url = config_parser.get('test_pack', 'portal_url')
         except ConfigParser.Error as e:
             die("--portal-url isn't specified on the command line and "
@@ -416,6 +416,19 @@ def _get_snapshot_branch_name(portal):
     response.raise_for_status()
     username = response.json()["login"]
     return "%s/snapshot" % username
+
+
+def find_test_pack_root():
+    """Walks upward from the current directory until it finds a directory
+    containing .stbt.conf
+    """
+    root = os.getcwd()
+    while root != '/':
+        if os.path.exists(os.path.join(root, '.stbt.conf')):
+            return root
+        root = os.path.split(root)[0]
+    raise Exception("""Didn't find "stbt.conf" at the root of your test-pack """
+                    """(starting at %s)""" % os.getcwd())
 
 
 def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
@@ -725,11 +738,11 @@ class NodeBusyException(Exception):
 class TestPack(object):
     def __init__(self, root=None, remote="origin"):
         if root is None:
-            root = os.curdir
+            root = find_test_pack_root()
         self.root = root
         self.remote = remote
 
-    def _git(self, cmd, capture_output=True, extra_env=None, **kwargs):
+    def _git(self, cmd, capture_output=True, extra_env=None, **kwargs):  # pylint:disable=no-self-use
         if capture_output:
             call = subprocess.check_output
         else:
@@ -741,7 +754,7 @@ class TestPack(object):
 
         logger.debug('+git %s', " ".join(cmd))
 
-        return call(["git"] + cmd, cwd=self.root, env=env, **kwargs)
+        return call(["git"] + cmd, env=env, **kwargs)
 
     def get_sha(self, branch='HEAD', obj_type=None):
         if obj_type:
