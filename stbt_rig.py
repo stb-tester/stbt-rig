@@ -165,11 +165,18 @@ def main(argv):
             Note: Run "./stbt_rig.py COMMAND -h" to see the additional
             parameters for each COMMAND."""))
 
-    run_parser = subcommands.add_parser("run", help="Run testcases")
+    run_parser = subcommands.add_parser(
+        "run", help="Run testcases",
+        description="""Run the specified testcases on the specified Stb-tester
+        node. In interactive mode (the default mode if not running inside a
+        Jenkins job) it also pushes a snapshot of your current test-pack and
+        pushes it to the branch YOUR_USERNAME/snapshot on GitHub, so that you
+        don't have to make lots of temporary git commits to debug your test
+        scripts.""")
     run_parser.add_argument(
         "--force", action="store_true",
         help="""Stop an existing job first (otherwise this script will fail if
-        the Stb-tester node is busy)""")
+        the Stb-tester node is busy).""")
     run_parser.add_argument(
         "--test-pack-revision", metavar="GIT_SHA", help="""Git commit SHA in
         the test-pack repository identifying the version of the tests to run.
@@ -211,10 +218,12 @@ def main(argv):
         .completer = _list_test_cases
 
     screenshot_parser = subcommands.add_parser(
-        "screenshot", help="Save a screenshot to disk")
+        "screenshot", help="Save a screenshot to disk",
+        description="""Take a screenshot from the specified Stb-tester node
+        and save it to disk.""")
     screenshot_parser.add_argument(
         "filename", default="screenshot.png", nargs='?',
-        help="Output filename. Defaults to %(default)s")
+        help="""Output filename. Defaults to "%(default)s".""")
 
     autocomplete(parser)
     args = parser.parse_args(argv[1:])
