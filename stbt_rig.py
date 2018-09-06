@@ -165,7 +165,7 @@ def main(argv):
             Note: Run "./stbt_rig.py COMMAND -h" to see the additional
             parameters for each COMMAND."""))
 
-    run_parser = subcommands.add_parser("run", help="Run test-cases")
+    run_parser = subcommands.add_parser("run", help="Run testcases")
     run_parser.add_argument(
         "--force", action="store_true",
         help="""Stop an existing job first (otherwise this script will fail if
@@ -195,7 +195,7 @@ def main(argv):
     run_parser.add_argument(
         "--shuffle", action="store_true", help="""Randomise the order in which
         the tests are run. If "--soak" is also specified, this will prefer
-        to run the faster test cases more often.""")
+        to run the faster testcases more often.""")
     run_parser.add_argument(
         "-t", "--tag", action="append", dest="tags", default=[],
         metavar="NAME=VALUE", help="""Tags are passed to the test scripts in
@@ -772,7 +772,7 @@ def _list_test_cases(prefix, **_kwargs):
     """Used for command-line tab-completion."""
 
     if "::" in prefix:
-        # List test-cases in the file.
+        # List testcases in the file.
         filename = prefix.split("::")[0]
         tests = []
         for line in open(filename):
