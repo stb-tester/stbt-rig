@@ -6,7 +6,7 @@
 For more details, and to get the latest version of this script, see
 <https://github.com/stb-tester/stbt-rig>.
 
-Copyright 2017 Stb-tester.com Ltd. <support@stb-tester.com>
+Copyright 2017-2018 Stb-tester.com Ltd. <support@stb-tester.com>
 Released under the MIT license.
 """
 
@@ -66,7 +66,7 @@ def main(argv):
             INTERACTIVE MODE:
               In interactive mode (the default mode if not running inside a
               Jenkins job) the "run" command takes a snapshot of your current
-              directory and pushes it to the branch YOUR_USERNAME/snapshot on
+              directory and pushes it to the branch "YOUR_USERNAME/snapshot" on
               GitHub, so that you don't have to make lots of temporary git
               commits to debug your test scripts.
 
@@ -225,6 +225,12 @@ def main(argv):
         "filename", default="screenshot.png", nargs='?',
         help="""Output filename. Defaults to "%(default)s".""")
 
+    subcommands.add_parser(
+        "snapshot", help="Push a snapshot of your current test-pack",
+        description="""Take a snapshot of your current test-pack and push it
+        to the branch "YOUR_USERNAME/snapshot" on GitHub. Note that the "run"
+        command automatically does this when in interactive mode.""")
+
     autocomplete(parser)
     args = parser.parse_args(argv[1:])
 
@@ -256,7 +262,7 @@ def main(argv):
             die("--portal-url isn't specified on the command line and "
                 "test_pack.portal_url isn't specified in .stbt.conf: %s", e)
 
-    if not args.node_id:
+    if args.command in ("run", "screenshot") and not args.node_id:
         die("argument --node-id is required")
 
     for portal_auth_token in iter_portal_auth_tokens(
@@ -270,6 +276,8 @@ def main(argv):
                 return cmd_run(args, node)
             elif args.command == "screenshot":
                 return cmd_screenshot(args, node)
+            elif args.command == "snapshot":
+                return cmd_snapshot(args, node)
             assert False, "Unreachable: Unknown command %r" % args.command
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 403:
@@ -300,17 +308,14 @@ def _exit(signo, _):
 
 def cmd_run(args, node):
     if args.mode == "interactive":
-        response = node.portal._get("/api/v2/user")
-        response.raise_for_status()
-        username = response.json()["login"]
-        branch_name = "%s/snapshot" % username
+        branch_name = _get_snapshot_branch_name(node.portal)
 
     if args.test_pack_revision:
         commit_sha = args.test_pack_revision
     else:
         if args.mode == "interactive":
-            testpack = TestPack(remote=args.git_remote)
-            commit_sha = testpack.push_git_snapshot(branch_name)
+            commit_sha = TestPack(remote=args.git_remote) \
+                         .push_git_snapshot(branch_name)
         elif args.mode in ["bamboo", "jenkins"]:
             # We assume that when in CI we're not in the git repo of the
             # test-pack, so run tests from master.
@@ -399,6 +404,18 @@ def cmd_run(args, node):
 def cmd_screenshot(args, node):
     node.save_screenshot(args.filename)
     return 0
+
+
+def cmd_snapshot(args, node):
+    branch_name = _get_snapshot_branch_name(node.portal)
+    TestPack(remote=args.git_remote).push_git_snapshot(branch_name)
+
+
+def _get_snapshot_branch_name(portal):
+    response = portal._get("/api/v2/user")
+    response.raise_for_status()
+    username = response.json()["login"]
+    return "%s/snapshot" % username
 
 
 def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
