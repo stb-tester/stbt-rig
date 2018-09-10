@@ -6,7 +6,7 @@
 For more details, and to get the latest version of this script, see
 <https://github.com/stb-tester/stbt-rig>.
 
-Copyright 2017 Stb-tester.com Ltd. <support@stb-tester.com>
+Copyright 2017-2018 Stb-tester.com Ltd. <support@stb-tester.com>
 Released under the MIT license.
 """
 
@@ -66,7 +66,7 @@ def main(argv):
             INTERACTIVE MODE:
               In interactive mode (the default mode if not running inside a
               Jenkins job) the "run" command takes a snapshot of your current
-              directory and pushes it to the branch YOUR_USERNAME/snapshot on
+              directory and pushes it to the branch "YOUR_USERNAME/snapshot" on
               GitHub, so that you don't have to make lots of temporary git
               commits to debug your test scripts.
 
@@ -165,11 +165,18 @@ def main(argv):
             Note: Run "./stbt_rig.py COMMAND -h" to see the additional
             parameters for each COMMAND."""))
 
-    run_parser = subcommands.add_parser("run", help="Run test-cases")
+    run_parser = subcommands.add_parser(
+        "run", help="Run testcases",
+        description="""Run the specified testcases on the specified Stb-tester
+        node. In interactive mode (the default mode if not running inside a
+        Jenkins job) it also pushes a snapshot of your current test-pack and
+        pushes it to the branch YOUR_USERNAME/snapshot on GitHub, so that you
+        don't have to make lots of temporary git commits to debug your test
+        scripts.""")
     run_parser.add_argument(
         "--force", action="store_true",
         help="""Stop an existing job first (otherwise this script will fail if
-        the Stb-tester node is busy)""")
+        the Stb-tester node is busy).""")
     run_parser.add_argument(
         "--test-pack-revision", metavar="GIT_SHA", help="""Git commit SHA in
         the test-pack repository identifying the version of the tests to run.
@@ -195,7 +202,7 @@ def main(argv):
     run_parser.add_argument(
         "--shuffle", action="store_true", help="""Randomise the order in which
         the tests are run. If "--soak" is also specified, this will prefer
-        to run the faster test cases more often.""")
+        to run the faster testcases more often.""")
     run_parser.add_argument(
         "-t", "--tag", action="append", dest="tags", default=[],
         metavar="NAME=VALUE", help="""Tags are passed to the test scripts in
@@ -211,10 +218,18 @@ def main(argv):
         .completer = _list_test_cases
 
     screenshot_parser = subcommands.add_parser(
-        "screenshot", help="Save a screenshot to disk")
+        "screenshot", help="Save a screenshot to disk",
+        description="""Take a screenshot from the specified Stb-tester node
+        and save it to disk.""")
     screenshot_parser.add_argument(
         "filename", default="screenshot.png", nargs='?',
-        help="Output filename. Defaults to %(default)s")
+        help="""Output filename. Defaults to "%(default)s".""")
+
+    subcommands.add_parser(
+        "snapshot", help="Push a snapshot of your current test-pack",
+        description="""Take a snapshot of your current test-pack and push it
+        to the branch "YOUR_USERNAME/snapshot" on GitHub. Note that the "run"
+        command automatically does this when in interactive mode.""")
 
     autocomplete(parser)
     args = parser.parse_args(argv[1:])
@@ -241,13 +256,13 @@ def main(argv):
 
     if not args.portal_url:
         try:
-            _, config_parser = read_stbt_conf(os.curdir)
+            _, config_parser = read_stbt_conf(find_test_pack_root())
             args.portal_url = config_parser.get('test_pack', 'portal_url')
         except ConfigParser.Error as e:
             die("--portal-url isn't specified on the command line and "
                 "test_pack.portal_url isn't specified in .stbt.conf: %s", e)
 
-    if not args.node_id:
+    if args.command in ("run", "screenshot") and not args.node_id:
         die("argument --node-id is required")
 
     for portal_auth_token in iter_portal_auth_tokens(
@@ -261,6 +276,8 @@ def main(argv):
                 return cmd_run(args, node)
             elif args.command == "screenshot":
                 return cmd_screenshot(args, node)
+            elif args.command == "snapshot":
+                return cmd_snapshot(args, node)
             assert False, "Unreachable: Unknown command %r" % args.command
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 403:
@@ -291,17 +308,14 @@ def _exit(signo, _):
 
 def cmd_run(args, node):
     if args.mode == "interactive":
-        response = node.portal._get("/api/v2/user")
-        response.raise_for_status()
-        username = response.json()["login"]
-        branch_name = "%s/snapshot" % username
+        branch_name = _get_snapshot_branch_name(node.portal)
 
     if args.test_pack_revision:
         commit_sha = args.test_pack_revision
     else:
         if args.mode == "interactive":
-            testpack = TestPack(remote=args.git_remote)
-            commit_sha = testpack.push_git_snapshot(branch_name)
+            commit_sha = TestPack(remote=args.git_remote) \
+                         .push_git_snapshot(branch_name)
         elif args.mode in ["bamboo", "jenkins"]:
             # We assume that when in CI we're not in the git repo of the
             # test-pack, so run tests from master.
@@ -390,6 +404,31 @@ def cmd_run(args, node):
 def cmd_screenshot(args, node):
     node.save_screenshot(args.filename)
     return 0
+
+
+def cmd_snapshot(args, node):
+    branch_name = _get_snapshot_branch_name(node.portal)
+    TestPack(remote=args.git_remote).push_git_snapshot(branch_name)
+
+
+def _get_snapshot_branch_name(portal):
+    response = portal._get("/api/v2/user")
+    response.raise_for_status()
+    username = response.json()["login"]
+    return "%s/snapshot" % username
+
+
+def find_test_pack_root():
+    """Walks upward from the current directory until it finds a directory
+    containing .stbt.conf
+    """
+    root = os.getcwd()
+    while root != '/':
+        if os.path.exists(os.path.join(root, '.stbt.conf')):
+            return root
+        root = os.path.split(root)[0]
+    raise Exception("""Didn't find "stbt.conf" at the root of your test-pack """
+                    """(starting at %s)""" % os.getcwd())
 
 
 def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
@@ -699,11 +738,11 @@ class NodeBusyException(Exception):
 class TestPack(object):
     def __init__(self, root=None, remote="origin"):
         if root is None:
-            root = os.curdir
+            root = find_test_pack_root()
         self.root = root
         self.remote = remote
 
-    def _git(self, cmd, capture_output=True, extra_env=None, **kwargs):
+    def _git(self, cmd, capture_output=True, extra_env=None, **kwargs):  # pylint:disable=no-self-use
         if capture_output:
             call = subprocess.check_output
         else:
@@ -715,7 +754,7 @@ class TestPack(object):
 
         logger.debug('+git %s', " ".join(cmd))
 
-        return call(["git"] + cmd, cwd=self.root, env=env, **kwargs)
+        return call(["git"] + cmd, env=env, **kwargs)
 
     def get_sha(self, branch='HEAD', obj_type=None):
         if obj_type:
@@ -772,7 +811,7 @@ def _list_test_cases(prefix, **_kwargs):
     """Used for command-line tab-completion."""
 
     if "::" in prefix:
-        # List test-cases in the file.
+        # List testcases in the file.
         filename = prefix.split("::")[0]
         tests = []
         for line in open(filename):

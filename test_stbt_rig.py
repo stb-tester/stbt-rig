@@ -26,9 +26,14 @@ def fixture_test_pack(tmpdir):  # pylint: disable=unused-argument
         'git', 'config', 'user.email', 'stbt-rig@stb-tester.com'])
     subprocess.check_call(['git', 'config', 'user.name', 'stbt-rig tests'])
 
+    with open(".stbt.conf", "w") as f:
+        f.write(dedent("""\
+            [test_pack]
+            portal_url = https://example.stb-tester.com
+            """))
     with open("moo", 'w') as f:
         f.write("Hello!\n")
-    subprocess.check_call(['git', 'add', 'moo'])
+    subprocess.check_call(['git', 'add', '.stbt.conf', 'moo'])
     subprocess.check_call(['git', 'commit', '-m', 'Test'])
 
     return stbt_rig.TestPack()
