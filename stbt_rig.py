@@ -56,6 +56,11 @@ def main(argv):
     if args.C:
         os.chdir(args.C)
 
+    resolve_args(args)
+    return main_with_args(args)
+
+
+def resolve_args(args):
     if args.mode == "auto":
         if "JENKINS_HOME" in os.environ:
             args.mode = "jenkins"
@@ -75,6 +80,8 @@ def main(argv):
     if args.command in ("run", "screenshot") and not args.node_id:
         die("argument --node-id is required")
 
+
+def main_with_args(args):
     for portal_auth_token in iter_portal_auth_tokens(
             args.portal_url, args.portal_auth_file, args.mode):
 
@@ -366,8 +373,17 @@ def _exit(signo, _):
 
 
 def cmd_run(args, node):
+    j = cmd_run_prep(args, node.portal)
+    return cmd_run_body(args, node, j)
+
+
+JobPrepResult = namedtuple(
+    "JobPrepResult", "branch_name commit_sha category tags")
+
+
+def cmd_run_prep(args, portal):
     if args.mode == "interactive":
-        branch_name = _get_snapshot_branch_name(node.portal)
+        branch_name = _get_snapshot_branch_name(portal)
 
     if args.test_pack_revision:
         commit_sha = args.test_pack_revision
@@ -427,11 +443,15 @@ def cmd_run(args, node):
             die("Duplicate --tag name: %s" % name)
         tags[name] = value
 
+    return JobPrepResult(branch_name, commit_sha, category, tags)
+
+
+def cmd_run_body(args, node, j):
     logger.info("Running tests...")
 
     job = node.run_tests(
-        commit_sha, args.test_cases, args.remote_control, category,
-        args.soak, args.shuffle, tags, args.force, await_completion=True)
+        j.commit_sha, args.test_cases, args.remote_control, j.category,
+        args.soak, args.shuffle, j.tags, args.force, await_completion=True)
 
     results = job.list_results()
 
