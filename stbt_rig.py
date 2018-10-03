@@ -513,6 +513,14 @@ def read_stbt_conf(root):
         "Traversing .stbt.conf symlinks failed: Symlink depth too great")
 
 
+class TestFailure(AssertionError):
+    result = 'fail'
+
+
+class TestError(Exception):
+    result = 'error'
+
+
 class Result(object):
     def __init__(self, portal, result_json):
         self._portal = portal
@@ -528,6 +536,21 @@ class Result(object):
 
     def is_ok(self):
         return self.json['result'] == "pass"
+
+    def raise_for_result(self):
+        if self.json['result'] == 'pass':
+            return
+
+        if 'traceback' not in self.json:
+            response = self._portal._get(
+                '/api/v2/results%s' % self.json['result_id'])
+            response.raise_for_status()
+            self.json = response.json()
+
+        if self.json['result'] == 'error':
+            raise TestError(self.json['traceback'])
+        elif self.json['result'] == 'fail':
+            raise TestFailure(self.json['traceback'])
 
 
 class TestJob(object):
