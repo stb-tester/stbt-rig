@@ -1,9 +1,15 @@
+import logging
 import os
+import re
+import socket
+import threading
+import time
 import subprocess
 from contextlib import contextmanager
 from textwrap import dedent
 
 import pytest
+import requests
 
 import stbt_rig
 
@@ -26,14 +32,23 @@ def fixture_test_pack(tmpdir):  # pylint: disable=unused-argument
         'git', 'config', 'user.email', 'stbt-rig@stb-tester.com'])
     subprocess.check_call(['git', 'config', 'user.name', 'stbt-rig tests'])
 
+    # Make git push a noop
+    subprocess.check_call(['git', 'remote', 'add', 'origin', '.'])
+
     with open(".stbt.conf", "w") as f:
         f.write(dedent("""\
             [test_pack]
             portal_url = https://example.stb-tester.com
             """))
+    with open(".gitignore", "w") as f:
+        f.write("token")
     with open("moo", 'w') as f:
         f.write("Hello!\n")
-    subprocess.check_call(['git', 'add', '.stbt.conf', 'moo'])
+    os.mkdir("tests")
+    with open("tests/test.py", 'w') as f:
+        f.write("def test_my_tests():\n    pass\n")
+    subprocess.check_call(
+        ['git', 'add', '.stbt.conf', 'moo', '.gitignore', 'tests/test.py'])
     subprocess.check_call(['git', 'commit', '-m', 'Test'])
 
     return stbt_rig.TestPack()
@@ -92,3 +107,121 @@ def test_testpack_snapshot_with_untracked_files(test_pack, capsys):
 
         To avoid this warning add untracked files (with "git add") or add them to .gitignore
         """))
+
+
+class PortalMock(object):
+    def __init__(self):
+        import flask
+        self.app = flask.Flask(__name__)
+        self.expectations = []
+        self.thread = None
+        self.socket = None
+
+        @self.app.before_request
+        def check_auth():
+            if (flask.request.headers['Authorization'] !=
+                    "token this is my token"):
+                return ("Forbidden", 403)
+            else:
+                return None
+
+        @self.app.route("/ready")
+        def ready():
+            return "Ready"
+
+        @self.app.route('/api/v2/user')
+        def get_user():
+            return flask.jsonify({"login": "tester"})
+
+        @self.app.route('/api/v2/jobs/mynode/6Pfq/167')
+        def get_job():
+            return flask.jsonify({'status': 'exited'})
+
+        @self.app.route('/api/v2/results')
+        def get_results():
+            assert flask.request.args['filter'] == 'job:/mynode/6Pfq/167'
+            return flask.jsonify([{
+                "result": "pass",
+                "triage_url": ("https://example.stb-tester.com/app/#/result/"
+                               "/mynode/6Pfq/167/2018-10-10_13.13.20"),
+                "result_id": "/mynode/6Pfq/167/2018-10-10_13.13.20",
+              }])
+
+        @self.app.route(
+            "/api/v2/results/mynode/6Pfq/167/2018-10-10_13.13.20/stbt.log")
+        def get_stbt_log():
+            return "The log output\n"
+
+        @self.app.route('/api/v2/run_tests', methods=['POST'])
+        def post_run_tests():
+            return flask.jsonify(self.on_run_tests(flask.request.json))
+
+        @self.app.route("/shutdown", methods=['POST'])
+        def shutdown():
+            func = flask.request.environ.get('werkzeug.server.shutdown')
+            if func is None:
+                raise RuntimeError('Not running with the Werkzeug Server')
+            func()
+            return ""
+
+    def __enter__(self):
+        from werkzeug.serving import make_server
+        from werkzeug.debug import DebuggedApplication
+
+        server = make_server('localhost', 0, DebuggedApplication(self.app))
+        self.address = server.socket.getsockname()
+
+        self.thread = threading.Thread(target=server.serve_forever)
+        self.thread.daemon = True
+        self.thread.start()
+
+        return self
+
+    def __exit__(self, *_):
+        requests.post("%s/shutdown" % self.url,
+                      headers={'Authorization': "token this is my token"})
+        self.thread.join()
+        self.thread = None
+        self.socket = None
+
+        assert not self.expectations
+
+    @property
+    def url(self):
+        return "http://%s:%i" % self.address
+
+    def expect_run_tests(self, **kwargs):
+        self.expectations.append(kwargs)
+
+    def on_run_tests(self, j):
+        expected = self.expectations.pop(0)
+        assert all(j[k] == v for k, v in expected.items())
+        return {'job_uid': '/mynode/6Pfq/167'}
+
+
+@pytest.fixture()
+def portal_mock():
+    with PortalMock() as m:
+        yield m
+
+
+def test_run_tests_interactive(capsys, test_pack, tmpdir, portal_mock):
+    with open('token', 'w') as f:
+        f.write("this is my token")
+    portal_mock.expect_run_tests(test_cases=['tests/test.py::test_my_tests'],
+                                 node_id="mynode")
+    assert 0 == stbt_rig.main([
+        'stbt_rig.py', '--node-id=mynode', '--portal-url=%s' % portal_mock.url,
+        '--portal-auth-file=token', 'run', 'tests/test.py::test_my_tests'])
+    expected_stdout = dedent("""\
+        https://example.stb-tester.com/app/#/result//mynode/6Pfq/167/2018-10-10_13.13.20
+        The log output
+        View these test results at: %s/app/#/results?filter=job:/mynode/6Pfq/167
+        """) % portal_mock.url
+    assert capsys.readouterr().out[-len(expected_stdout):] == expected_stdout
+
+    portal_mock.expect_run_tests(test_cases=['tests/test.py::test_my_tests'],
+                                 node_id="mynode")
+    assert 0 == stbt_rig.main([
+        'stbt_rig.py', '--node-id=mynode', '--portal-url=%s' % portal_mock.url,
+        '--portal-auth-file=token', 'run', 'tests/test.py::test_my_tests'])
