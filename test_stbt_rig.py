@@ -195,7 +195,8 @@ class PortalMock(object):
 
     def on_run_tests(self, j):
         expected = self.expectations.pop(0)
-        assert all(j[k] == v for k, v in expected.items())
+        for k, v in expected.items():
+            assert j[k] == v
         return {'job_uid': '/mynode/6Pfq/167'}
 
 
@@ -226,6 +227,13 @@ def test_run_tests_interactive(capsys, test_pack, tmpdir, portal_mock):
         'stbt_rig.py', '--node-id=mynode', '--portal-url=%s' % portal_mock.url,
         '--portal-auth-file=token', 'run', 'tests/test.py::test_my_tests'])
 
+    os.chdir('tests')
+    portal_mock.expect_run_tests(test_cases=['tests/test.py::test_my_tests'],
+                                 node_id="mynode")
+    assert 0 == stbt_rig.main([
+        'stbt_rig.py', '--node-id=mynode', '--portal-url=%s' % portal_mock.url,
+        '--portal-auth-file=../token', 'run', 'test.py::test_my_tests'])
+
 
 def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
     import platform
@@ -245,3 +253,11 @@ def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
         'py.test', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
         '--portal-url=%s' % portal_mock.url, '--portal-auth-file=token',
         '--node-id=mynode', 'tests/test.py::test_my_tests'], env=env)
+
+    os.chdir('tests')
+    portal_mock.expect_run_tests(test_cases=['tests/test.py::test_my_tests'],
+                                 node_id="mynode")
+    subprocess.check_call([
+        'py.test', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
+        '--portal-url=%s' % portal_mock.url, '--portal-auth-file=../token',
+        '--node-id=mynode', 'test.py::test_my_tests'], env=env)

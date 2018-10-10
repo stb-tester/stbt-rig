@@ -458,8 +458,15 @@ def cmd_run_prep(args, portal):
 def cmd_run_body(args, node, j):
     logger.info("Running tests...")
 
+    try:
+        root = find_test_pack_root()
+        test_cases = [os.path.relpath(x, root).replace('\\', '/')
+                      for x in args.test_cases]
+    except NotInTestPack:
+        test_cases = args.test_cases
+
     job = node.run_tests(
-        j.commit_sha, args.test_cases, args.remote_control, j.category,
+        j.commit_sha, test_cases, args.remote_control, j.category,
         args.soak, args.shuffle, j.tags, args.force, await_completion=True)
 
     results = job.list_results()
@@ -511,6 +518,10 @@ def _get_snapshot_branch_name(portal):
     return "%s/snapshot" % username
 
 
+class NotInTestPack(Exception):
+    pass
+
+
 def find_test_pack_root():
     """Walks upward from the current directory until it finds a directory
     containing .stbt.conf
@@ -520,8 +531,9 @@ def find_test_pack_root():
         if os.path.exists(os.path.join(root, '.stbt.conf')):
             return root
         root = os.path.split(root)[0]
-    raise Exception("""Didn't find "stbt.conf" at the root of your test-pack """
-                    """(starting at %s)""" % os.getcwd())
+    raise NotInTestPack(
+        """Didn't find "stbt.conf" at the root of your test-pack """
+        """(starting at %s)""" % os.getcwd())
 
 
 def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
