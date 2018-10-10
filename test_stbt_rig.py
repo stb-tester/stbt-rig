@@ -225,3 +225,23 @@ def test_run_tests_interactive(capsys, test_pack, tmpdir, portal_mock):
     assert 0 == stbt_rig.main([
         'stbt_rig.py', '--node-id=mynode', '--portal-url=%s' % portal_mock.url,
         '--portal-auth-file=token', 'run', 'tests/test.py::test_my_tests'])
+
+
+def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
+    import platform
+    if platform.system() == "Windows":
+        # On appveyor the check_call fails because it can't find py.test.  I'm
+        # sure this is fixable but I don't have a Windows environment to play
+        # with it right now.
+        pytest.skip()
+
+    with open('token', 'w') as f:
+        f.write("this is my token")
+    portal_mock.expect_run_tests(test_cases=['tests/test.py::test_my_tests'],
+                                 node_id="mynode")
+    env = os.environ.copy()
+    env['PYTHONPATH'] = os.path.dirname(os.path.abspath(__file__))
+    subprocess.check_call([
+        'py.test', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
+        '--portal-url=%s' % portal_mock.url, '--portal-auth-file=token',
+        '--node-id=mynode', 'tests/test.py::test_my_tests'], env=env)

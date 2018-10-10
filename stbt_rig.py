@@ -12,6 +12,7 @@ Released under the MIT license.
 
 import argparse
 import ConfigParser
+import itertools
 import logging
 import os
 import re
@@ -117,16 +118,23 @@ def main_with_args(args):
 
 class Arg(namedtuple(
         'Arg', 'name action nargs default choices help metavar dest '
-        'completer')):
+        'completer cmdline_only')):
     def add(self, parser):
         d = {k: v for k, v in self._asdict().items()
-             if (k not in ['name', 'completer'] and
+             if (k not in ['name', 'completer', 'cmdline_only'] and
                  v is not None)}
         a = parser.add_argument(
             *(self[0] if isinstance(self[0], tuple) else (self[0],)),
             **d)
         if self.completer:
             a.completer = self.completer
+
+    @property
+    def longname(self):
+        if isinstance(self.name, tuple):
+            return self.name[1]
+        else:
+            return self.name
 
 Arg.__new__.__defaults__ = (
     None, None, None, None, None, None, None, None, False)
@@ -234,7 +242,7 @@ ARGPARSE_EPILOGUE = dedent("""\
 
 ARGS = [
     Arg("-C", metavar="PATH", help="Change to directory PATH before doing "
-        "anything else."),
+        "anything else.", cmdline_only=True),
 
     Arg("--portal-url", metavar="https://COMPANYNAME.stb-tester.com",
         help="""Base URL of your Stb-tester Portal. You can specify it on the
@@ -264,13 +272,14 @@ ARGS = [
         default="auto",
         help="""See the sections INTERACTIVE MODE and JENKINS INTEGRATION
         below. This defaults to "auto", which detects whether or not it is
-        being run inside Jenkins or Bamboo."""),
+        being run inside Jenkins or Bamboo.""", cmdline_only=True),
 
     Arg("--csv", metavar="FILENAME",
         help="Also write test-results in CSV format to the specified file."),
 
     Arg(("-v", "--verbose"), action="count", dest="verbosity", default=0,
-        help="""Specify once to enable INFO logging, twice for DEBUG."""),
+        help="""Specify once to enable INFO logging, twice for DEBUG.""",
+        cmdline_only=True),
 ]
 
 RUN_ARGS = [
@@ -298,11 +307,11 @@ RUN_ARGS = [
         this defaults to the Jenkins job name."""),
 
     Arg("--soak", action="store_true", help="""Run the testcases forever until
-        you interrupt them by pressing Control-C."""),
+        you interrupt them by pressing Control-C.""", cmdline_only=True),
 
     Arg("--shuffle", action="store_true", help="""Randomise the order in which
         the tests are run. If "--soak" is also specified, this will prefer
-        to run the faster testcases more often."""),
+        to run the faster testcases more often.""", cmdline_only=True),
 
     Arg(("-t", "--tag"), action="append", dest="tags", default=[],
         metavar="NAME=VALUE", help="""Tags are passed to the test scripts in
@@ -314,7 +323,7 @@ RUN_ARGS = [
         FILENAME::FUNCTION_NAME where FILENAME is given relative to the root of
         the test-pack repository and FUNCTION_NAME identifies a Python function
         within that file; for example
-        "tests/my_test.py::test_that_blah_dee_blah".""",
+        "tests/my_test.py::test_that_blah_dee_blah".""", cmdline_only=True,
         completer=_list_test_cases)
 ]
 
@@ -382,13 +391,13 @@ JobPrepResult = namedtuple(
 
 
 def cmd_run_prep(args, portal):
-    if args.mode == "interactive":
+    if args.mode in ["interactive", "pytest"]:
         branch_name = _get_snapshot_branch_name(portal)
 
     if args.test_pack_revision:
         commit_sha = args.test_pack_revision
     else:
-        if args.mode == "interactive":
+        if args.mode in ["interactive", "pytest"]:
             commit_sha = TestPack(remote=args.git_remote) \
                          .push_git_snapshot(branch_name)
         elif args.mode in ["bamboo", "jenkins"]:
@@ -401,7 +410,7 @@ def cmd_run_prep(args, portal):
     if args.category:
         category = args.category
     else:
-        if args.mode == "interactive":
+        if args.mode in ["interactive", "pytest"]:
             category = branch_name
         elif args.mode == "jenkins":
             category = os.environ["JOB_NAME"]
@@ -455,7 +464,7 @@ def cmd_run_body(args, node, j):
 
     results = job.list_results()
 
-    if args.mode == "interactive":
+    if args.mode in ["interactive", 'pytest']:
         for result in results:
             print ""
             print result.json["triage_url"]
@@ -474,10 +483,15 @@ def cmd_run_body(args, node, j):
     print "View these test results at: %s/app/#/results?filter=job:%s" % (
         node.portal.url(), job.job_uid)
 
-    if all(result.is_ok() for result in results):
+    if args.mode == "pytest":
+        for result in results:
+            result.raise_for_result()
         return 0
     else:
-        return 1
+        if all(result.is_ok() for result in results):
+            return 0
+        else:
+            return 1
 
 
 def cmd_screenshot(args, node):
@@ -539,7 +553,8 @@ def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
                 "variable bamboo.STBT_AUTH_PASSWORD")
         return
 
-    assert mode == "interactive", "Unreachable: Unknown mode %s" % mode
+    assert mode in ["interactive", "pytest"], \
+        "Unreachable: Unknown mode %s" % mode
 
     keyring = None
     try:
@@ -907,6 +922,117 @@ class TestPack(object):
             [self.remote,
              '%s:refs/heads/%s' % (commit_sha, branch)])
         return commit_sha
+
+
+try:
+    import pytest
+
+    def pytest_addoption(parser):
+        group = parser.getgroup("stbt", "stb-tester REST API")
+        for arg in itertools.chain(ARGS, RUN_ARGS):
+            if arg.cmdline_only:
+                continue
+            d = {k: v for k, v in arg._asdict().items()
+                 if (k not in ['name', 'completer', 'cmdline_only'] and
+                     v is not None)}
+            group.addoption(arg.longname, **d)
+
+
+    def pytest_collect_file(path, parent):
+        if path.ext == ".py":
+            return StbtCollector(path, parent)
+        else:
+            return None
+
+
+    class StbtCollector(pytest.File):
+        def collect(self):
+            with open(self.name) as f:
+                # We implement our own parsing to avoid import stbt ImportErrors
+                for line in f:
+                    m = re.match(r'def (test_.*)\s*\(\):\s*$', line)
+                    if m:
+                        yield StbtRemoteTest(self, self.name, m.group(1))
+
+
+    class StbtRemoteTest(pytest.Item):
+        def __init__(self, parent, filename, testname):
+            super(StbtRemoteTest, self).__init__(testname, parent)
+            self._filename = filename
+            self._testname = testname
+
+        def __repr__(self):
+            return "StbtRemoteTest(%r, %r)" % (self._filename, self._testname)
+
+        def runtest(self):
+            j = self.session.stbt_run_prep
+            try:
+                self.session.stbt_args.test_cases = ["%s::%s" % (
+                    self._filename, self._testname)]
+                cmd_run_body(self.session.stbt_args, self.session.stbt_node, j)
+            except requests.exceptions.HTTPError as e:
+                message = "HTTP %i Error: %s" % (
+                    e.response.status_code, e.response.text)
+                if hasattr(e, "request"):
+                    message += " during %s %s" % (
+                        e.request.method, e.request.url)  # pylint:disable=no-member
+                sys.stderr.write(message + '\n')
+                raise
+            finally:
+                self.session.stbt_args.test_cases = None
+
+
+    class Args(object):
+        """Pretends to be the result of calling `argparser` `parse_args` so we
+        can reuse code from stbt_rig for filling in the details"""
+        def __init__(self, config):
+            for arg in itertools.chain(ARGS, RUN_ARGS):
+                dest = arg.dest or arg.longname.strip('-').replace('-', '_')
+                if arg.cmdline_only:
+                    setattr(self, dest, arg.default)
+                else:
+                    setattr(self, dest, config.getvalue(dest))
+
+            self.test_cases = None
+            self.mode = "pytest"
+            self.command = "run"
+
+
+    def pytest_sessionstart(session):
+        args = Args(session.config)
+        session.stbt_args = args
+        resolve_args(session.stbt_args)
+
+        capmanager = session.config.pluginmanager.getplugin('capturemanager')
+        capmanager.suspend_global_capture(in_=True)
+        for portal_auth_token in iter_portal_auth_tokens(
+                args.portal_url, args.portal_auth_file, args.mode):
+            try:
+                portal = Portal(args.portal_url, portal_auth_token)
+                node = Node(portal, session.config.getvalue("node_id"))
+
+                j = cmd_run_prep(args, portal)
+                break
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 403:
+                    # Unauthorised. Try again, but with a new password.
+                    logger.error('Authentication failure with token "...%s"',
+                                 portal_auth_token[-8:])
+                else:
+                    message = "HTTP %i Error: %s" % (
+                        e.response.status_code, e.response.text)
+                    if hasattr(e, "request"):
+                        message += " during %s %s" % (
+                            e.request.method, e.request.url)  # pylint:disable=no-member
+                    die(message)
+
+        capmanager.resume_global_capture()
+
+        session.stbt_node = node
+        session.stbt_run_prep = j
+except ImportError:
+    # Pytest integration is optional
+    pass
 
 
 @contextmanager
