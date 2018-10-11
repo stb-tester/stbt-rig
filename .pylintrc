@@ -28,6 +28,9 @@ disable=
   too-many-return-statements,
   too-many-statements,
 
+[TYPECHECK]
+ignored-classes=Args
+
 [FORMAT]
 max-line-length=80
 ignore-long-lines=https?://

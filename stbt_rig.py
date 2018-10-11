@@ -12,6 +12,7 @@ Released under the MIT license.
 
 import argparse
 import ConfigParser
+import itertools
 import logging
 import os
 import re
@@ -21,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections import namedtuple
 from contextlib import contextmanager
 from textwrap import dedent
 
@@ -39,198 +41,7 @@ logger = logging.getLogger("stbt_rig")
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(
-        description="Command-line tool for interacting with the Stb-tester "
-        "Portal's REST API.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=dedent("""\
-            AUTHENTICATION:
-              Go to the Stb-tester Portal in your web browser and create an
-              access token. See
-              https://stb-tester.com/manual/rest-api-v2#authentication
-
-              When you run this script the first time, you will be prompted to
-              type in the access token. If you have the Python "keyring"
-              package installed, we will save the token in the secure password
-              storage provided by your operating system, so that you don't have
-              to type it in again.
-
-              You can also save the access token to a file (don't commit the
-              file to the git repository!) and give the filename with
-              --portal-auth-file.
-
-              In Jenkins you can use the Credentials Binding plugin to pass the
-              access token in an environment variable. See the Jenkins
-              documentation below.
-
-            INTERACTIVE MODE:
-              In interactive mode (the default mode if not running inside a
-              Jenkins job) the "run" command takes a snapshot of your current
-              directory and pushes it to the branch "YOUR_USERNAME/snapshot" on
-              GitHub, so that you don't have to make lots of temporary git
-              commits to debug your test scripts.
-
-            JENKINS INTEGRATION:
-              We automatically detect if we are running inside a Jenkins job.
-              If so, we enable the following behaviours:
-
-              * Read the access token from $STBT_AUTH_TOKEN environment
-                variable.
-              * Record various Jenkins parameters as "tags" in the Stb-tester
-                results:
-                - jenkins/BUILD_ID
-                - jenkins/BUILD_URL
-                - jenkins/GIT_COMMIT
-                - jenkins/JOB_NAME
-                - jenkins/SVN_REVISION
-              * Write test results in JUnit format to "stbt-results.xml" for
-                the Jenkins JUnit plugin.
-              * Stop the tests if you press the "stop" button in Jenkins.
-
-              For instructions on how to configure your Jenkins job see
-              https://stb-tester.com/manual/continuous-integration
-
-            BAMBOO INTEGRATION:
-              Similarly, we automatically detect if we are running from
-              Bamboo (Atlassian's continuous integration server):
-
-              * Read the access token from bamboo.STBT_AUTH_PASSWORD variable.
-              * Record the following Bamboo variables as "tags" in the
-                Stb-tester results:
-                - bamboo.buildPlanName
-                - bamboo.buildResultKey
-                - bamboo.buildResultsUrl
-                - bamboo.planRepository.branchName
-                - bamboo.planRepository.revision
-              * Write test results in JUnit format to "stbt-results.xml"
-                suitable for Bamboo's "JUnit Parser" task.
-              * Stop the tests if you press "Stop build" in Bamboo.
-
-              For instructions on how to configure your Bamboo job see
-              https://stb-tester.com/manual/continuous-integration
-
-        """))
-
-    parser.add_argument(
-        "-C", metavar="PATH", help="Change to directory PATH before doing "
-        "anything else.")
-
-    parser.add_argument(
-        "--portal-url", metavar="https://COMPANYNAME.stb-tester.com",
-        help="""Base URL of your Stb-tester Portal. You can specify it on the
-        command line or as "portal_url" in the [test_pack] section of
-        .stbt.conf. We look for .stbt.conf in the current working
-        directory.""")
-
-    # Can't pass auth token on command line because it would be visible in
-    # /proc. Pass it in a file instead.
-    parser.add_argument(
-        "--portal-auth-file", metavar="FILENAME",
-        help="""File containing the HTTP REST API access token. See the
-        AUTHENTICATION section below.""")
-
-    parser.add_argument(
-        "--node-id", metavar="stb-tester-abcdef123456",
-        help="""Which Stb-tester node to execute the COMMAND on. The node ID is
-        labelled on the physical Stb-tester node, and it is also shown in the
-        Stb-tester Portal.""") \
-        .completer = _list_node_ids
-
-    parser.add_argument(
-        "--git-remote", metavar="NAME", default="origin",
-        help="""Which git remote to push to. Defaults to "origin" (this is the
-        default name that git creates when you did the original "git clone" of
-        the test-pack repository). This is only used by the commands that need
-        to push temporary snapshots to git: that is, "run" and "press" when
-        "--mode=interactive".""")
-
-    parser.add_argument(
-        "--mode", choices=["auto", "bamboo", "interactive", "jenkins"],
-        default="auto",
-        help="""See the sections INTERACTIVE MODE and JENKINS INTEGRATION
-        below. This defaults to "auto", which detects whether or not it is
-        being run inside Jenkins or Bamboo.""")
-
-    parser.add_argument(
-        "--csv", metavar="FILENAME",
-        help="Also write test-results in CSV format to the specified file.")
-
-    parser.add_argument(
-        "-v", "--verbose", action="count", dest="verbosity", default=0,
-        help="""Specify once to enable INFO logging, twice for DEBUG.""")
-
-    subcommands = parser.add_subparsers(
-        dest="command", title="COMMANDS", metavar="COMMAND",
-        description=dedent("""\
-            Note: Run "./stbt_rig.py COMMAND -h" to see the additional
-            parameters for each COMMAND."""))
-
-    run_parser = subcommands.add_parser(
-        "run", help="Run testcases",
-        description="""Run the specified testcases on the specified Stb-tester
-        node. In interactive mode (the default mode if not running inside a
-        Jenkins job) it also pushes a snapshot of your current test-pack and
-        pushes it to the branch YOUR_USERNAME/snapshot on GitHub, so that you
-        don't have to make lots of temporary git commits to debug your test
-        scripts.""")
-    run_parser.add_argument(
-        "--force", action="store_true",
-        help="""Stop an existing job first (otherwise this script will fail if
-        the Stb-tester node is busy).""")
-    run_parser.add_argument(
-        "--test-pack-revision", metavar="GIT_SHA", help="""Git commit SHA in
-        the test-pack repository identifying the version of the tests to run.
-        Can also be the name of a git branch or tag. In interactive mode this
-        defaults to a snapshot of your current working directory. In jenkins
-        mode this defaults to "master".""")
-    run_parser.add_argument(
-        "--remote-control", metavar="NAME", help="""The remote control infrared
-        configuration to use when running the tests. This should match the name
-        of a remote control configuration file in your test-pack git
-        repository. For example if your test-pack has
-        "config/remote-control/roku.lircd.conf" then you should specify "roku".
-        If not specified here, you must specify
-        "test_pack.default_remote_control" in the test-pack's .stbt.conf""")
-    run_parser.add_argument(
-        "--category", metavar="NAME", help="""Category to save the test-results
-        in. When you are viewing test results you can filter by this string. In
-        interactive mode this defaults to "USERNAME/snapshot". In jenkins mode
-        this defaults to the Jenkins job name.""")
-    run_parser.add_argument(
-        "--soak", action="store_true", help="""Run the testcases forever until
-        you interrupt them by pressing Control-C.""")
-    run_parser.add_argument(
-        "--shuffle", action="store_true", help="""Randomise the order in which
-        the tests are run. If "--soak" is also specified, this will prefer
-        to run the faster testcases more often.""")
-    run_parser.add_argument(
-        "-t", "--tag", action="append", dest="tags", default=[],
-        metavar="NAME=VALUE", help="""Tags are passed to the test scripts in
-        sys.argv and are recorded alongside the test-results. "--tag" can be
-        specified more than once.""")
-    run_parser.add_argument(
-        "test_cases", nargs='+', metavar="TESTCASE",
-        help="""One or more tests to run. Test names have the form
-        FILENAME::FUNCTION_NAME where FILENAME is given relative to the root of
-        the test-pack repository and FUNCTION_NAME identifies a Python function
-        within that file; for example
-        "tests/my_test.py::test_that_blah_dee_blah".""") \
-        .completer = _list_test_cases
-
-    screenshot_parser = subcommands.add_parser(
-        "screenshot", help="Save a screenshot to disk",
-        description="""Take a screenshot from the specified Stb-tester node
-        and save it to disk.""")
-    screenshot_parser.add_argument(
-        "filename", default="screenshot.png", nargs='?',
-        help="""Output filename. Defaults to "%(default)s".""")
-
-    subcommands.add_parser(
-        "snapshot", help="Push a snapshot of your current test-pack",
-        description="""Take a snapshot of your current test-pack and push it
-        to the branch "YOUR_USERNAME/snapshot" on GitHub. Note that the "run"
-        command automatically does this when in interactive mode.""")
-
+    parser = argparser()
     autocomplete(parser)
     args = parser.parse_args(argv[1:])
 
@@ -246,6 +57,11 @@ def main(argv):
     if args.C:
         os.chdir(args.C)
 
+    resolve_args(args)
+    return main_with_args(args)
+
+
+def resolve_args(args):
     if args.mode == "auto":
         if "JENKINS_HOME" in os.environ:
             args.mode = "jenkins"
@@ -265,6 +81,8 @@ def main(argv):
     if args.command in ("run", "screenshot") and not args.node_id:
         die("argument --node-id is required")
 
+
+def main_with_args(args):
     for portal_auth_token in iter_portal_auth_tokens(
             args.portal_url, args.portal_auth_file, args.mode):
 
@@ -298,6 +116,263 @@ def main(argv):
     return 1
 
 
+class Arg(namedtuple(
+        'Arg', 'name action nargs default choices help metavar dest '
+        'completer cmdline_only')):
+    def add(self, parser):
+        d = {k: v for k, v in self._asdict().items()
+             if (k not in ['name', 'completer', 'cmdline_only'] and
+                 v is not None)}
+        a = parser.add_argument(
+            *(self[0] if isinstance(self[0], tuple) else (self[0],)),
+            **d)
+        if self.completer:
+            a.completer = self.completer
+
+    @property
+    def longname(self):
+        if isinstance(self.name, tuple):
+            return self.name[1]
+        else:
+            return self.name
+
+Arg.__new__.__defaults__ = (
+    None, None, None, None, None, None, None, None, False)
+
+
+def _list_node_ids(**_kwargs):
+    """Used for command-line tab-completion.
+
+    For lack of a better place too look, looks for configuration files in
+    config/test-farm -- see https://stb-tester.com/manual/advanced-configuration#node-specific-configuration-files
+    """
+
+    return [f[17:-5]
+            for f in subprocess.check_output(
+                ["git", "ls-files", "config/test-farm/stb-tester-*.conf"])
+            .strip().split("\n")]
+
+
+def _list_test_cases(prefix, **_kwargs):
+    """Used for command-line tab-completion."""
+
+    if "::" in prefix:
+        # List testcases in the file.
+        filename = prefix.split("::")[0]
+        tests = []
+        for line in open(filename):
+            m = re.match(r"^def\s+(test_[a-zA-Z0-9_]+)", line)
+            if m:
+                tests.append(filename + "::" + m.group(1))
+        return tests
+
+    else:
+        # List files:
+        return [f + "::"
+                for f in subprocess.check_output(
+                    ["git", "ls-files", "tests/**.py"]).strip().split("\n")]
+
+
+ARGPARSE_EPILOGUE = dedent("""\
+    AUTHENTICATION:
+      Go to the Stb-tester Portal in your web browser and create an
+      access token. See
+      https://stb-tester.com/manual/rest-api-v2#authentication
+
+      When you run this script the first time, you will be prompted to
+      type in the access token. If you have the Python "keyring"
+      package installed, we will save the token in the secure password
+      storage provided by your operating system, so that you don't have
+      to type it in again.
+
+      You can also save the access token to a file (don't commit the
+      file to the git repository!) and give the filename with
+      --portal-auth-file.
+
+      In Jenkins you can use the Credentials Binding plugin to pass the
+      access token in an environment variable. See the Jenkins
+      documentation below.
+
+    INTERACTIVE MODE:
+      In interactive mode (the default mode if not running inside a
+      Jenkins job) the "run" command takes a snapshot of your current
+      directory and pushes it to the branch "YOUR_USERNAME/snapshot" on
+      GitHub, so that you don't have to make lots of temporary git
+      commits to debug your test scripts.
+
+    JENKINS INTEGRATION:
+      We automatically detect if we are running inside a Jenkins job.
+      If so, we enable the following behaviours:
+
+      * Read the access token from $STBT_AUTH_TOKEN environment
+        variable.
+      * Record various Jenkins parameters as "tags" in the Stb-tester
+        results:
+        - jenkins/BUILD_ID
+        - jenkins/BUILD_URL
+        - jenkins/GIT_COMMIT
+        - jenkins/JOB_NAME
+        - jenkins/SVN_REVISION
+      * Write test results in JUnit format to "stbt-results.xml" for
+        the Jenkins JUnit plugin.
+      * Stop the tests if you press the "stop" button in Jenkins.
+
+      For instructions on how to configure your Jenkins job see
+      https://stb-tester.com/manual/continuous-integration
+
+    BAMBOO INTEGRATION:
+      Similarly, we automatically detect if we are running from
+      Bamboo (Atlassian's continuous integration server):
+
+      * Read the access token from bamboo.STBT_AUTH_PASSWORD variable.
+      * Record the following Bamboo variables as "tags" in the
+        Stb-tester results:
+        - bamboo.buildPlanName
+        - bamboo.buildResultKey
+        - bamboo.buildResultsUrl
+        - bamboo.planRepository.branchName
+        - bamboo.planRepository.revision
+      * Write test results in JUnit format to "stbt-results.xml"
+        suitable for Bamboo's "JUnit Parser" task.
+      * Stop the tests if you press "Stop build" in Bamboo.
+
+      For instructions on how to configure your Bamboo job see
+      https://stb-tester.com/manual/continuous-integration
+""")
+
+ARGS = [
+    Arg("-C", metavar="PATH", help="Change to directory PATH before doing "
+        "anything else.", cmdline_only=True),
+
+    Arg("--portal-url", metavar="https://COMPANYNAME.stb-tester.com",
+        help="""Base URL of your Stb-tester Portal. You can specify it on the
+        command line or as "portal_url" in the [test_pack] section of
+        .stbt.conf. We look for .stbt.conf in the current working
+        directory."""),
+
+    # Can't pass auth token on command line because it would be visible in
+    # /proc. Pass it in a file instead.
+    Arg("--portal-auth-file", metavar="FILENAME",
+        help="""File containing the HTTP REST API access token. See the
+        AUTHENTICATION section below."""),
+
+    Arg("--node-id", metavar="stb-tester-abcdef123456",
+        help="""Which Stb-tester node to execute the COMMAND on. The node ID is
+        labelled on the physical Stb-tester node, and it is also shown in the
+        Stb-tester Portal.""", completer=_list_node_ids),
+
+    Arg("--git-remote", metavar="NAME", default="origin",
+        help="""Which git remote to push to. Defaults to "origin" (this is the
+        default name that git creates when you did the original "git clone" of
+        the test-pack repository). This is only used by the commands that need
+        to push temporary snapshots to git: that is, "run" and "press" when
+        "--mode=interactive"."""),
+
+    Arg("--mode", choices=["auto", "bamboo", "interactive", "jenkins"],
+        default="auto",
+        help="""See the sections INTERACTIVE MODE and JENKINS INTEGRATION
+        below. This defaults to "auto", which detects whether or not it is
+        being run inside Jenkins or Bamboo.""", cmdline_only=True),
+
+    Arg("--csv", metavar="FILENAME",
+        help="Also write test-results in CSV format to the specified file."),
+
+    Arg(("-v", "--verbose"), action="count", dest="verbosity", default=0,
+        help="""Specify once to enable INFO logging, twice for DEBUG.""",
+        cmdline_only=True),
+]
+
+RUN_ARGS = [
+    Arg("--force", action="store_true",
+        help="""Stop an existing job first (otherwise this script will fail if
+        the Stb-tester node is busy)."""),
+
+    Arg("--test-pack-revision", metavar="GIT_SHA", help="""Git commit SHA in
+        the test-pack repository identifying the version of the tests to run.
+        Can also be the name of a git branch or tag. In interactive mode this
+        defaults to a snapshot of your current working directory. In jenkins
+        mode this defaults to "master"."""),
+
+    Arg("--remote-control", metavar="NAME", help="""The remote control infrared
+        configuration to use when running the tests. This should match the name
+        of a remote control configuration file in your test-pack git
+        repository. For example if your test-pack has
+        "config/remote-control/roku.lircd.conf" then you should specify "roku".
+        If not specified here, you must specify
+        "test_pack.default_remote_control" in the test-pack's .stbt.conf"""),
+
+    Arg("--category", metavar="NAME", help="""Category to save the test-results
+        in. When you are viewing test results you can filter by this string. In
+        interactive mode this defaults to "USERNAME/snapshot". In jenkins mode
+        this defaults to the Jenkins job name."""),
+
+    Arg("--soak", action="store_true", help="""Run the testcases forever until
+        you interrupt them by pressing Control-C.""", cmdline_only=True),
+
+    Arg("--shuffle", action="store_true", help="""Randomise the order in which
+        the tests are run. If "--soak" is also specified, this will prefer
+        to run the faster testcases more often.""", cmdline_only=True),
+
+    Arg(("-t", "--tag"), action="append", dest="tags", default=[],
+        metavar="NAME=VALUE", help="""Tags are passed to the test scripts in
+        sys.argv and are recorded alongside the test-results. "--tag" can be
+        specified more than once."""),
+
+    Arg("test_cases", nargs='+', metavar="TESTCASE",
+        help="""One or more tests to run. Test names have the form
+        FILENAME::FUNCTION_NAME where FILENAME is given relative to the root of
+        the test-pack repository and FUNCTION_NAME identifies a Python function
+        within that file; for example
+        "tests/my_test.py::test_that_blah_dee_blah".""", cmdline_only=True,
+        completer=_list_test_cases)
+]
+
+
+def argparser():
+    parser = argparse.ArgumentParser(
+        description="Command-line tool for interacting with the Stb-tester "
+        "Portal's REST API.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=ARGPARSE_EPILOGUE)
+
+    for arg in ARGS:
+        arg.add(parser)
+
+    subcommands = parser.add_subparsers(
+        dest="command", title="COMMANDS", metavar="COMMAND",
+        description=dedent("""\
+            Note: Run "./stbt_rig.py COMMAND -h" to see the additional
+            parameters for each COMMAND."""))
+
+    run_parser = subcommands.add_parser(
+        "run", help="Run testcases",
+        description="""Run the specified testcases on the specified Stb-tester
+        node. In interactive mode (the default mode if not running inside a
+        Jenkins job) it also pushes a snapshot of your current test-pack and
+        pushes it to the branch YOUR_USERNAME/snapshot on GitHub, so that you
+        don't have to make lots of temporary git commits to debug your test
+        scripts.""")
+
+    for arg in RUN_ARGS:
+        arg.add(run_parser)
+
+    screenshot_parser = subcommands.add_parser(
+        "screenshot", help="Save a screenshot to disk",
+        description="""Take a screenshot from the specified Stb-tester node
+        and save it to disk.""")
+    screenshot_parser.add_argument(
+        "filename", default="screenshot.png", nargs='?',
+        help="""Output filename. Defaults to "%(default)s".""")
+
+    subcommands.add_parser(
+        "snapshot", help="Push a snapshot of your current test-pack",
+        description="""Take a snapshot of your current test-pack and push it
+        to the branch "YOUR_USERNAME/snapshot" on GitHub. Note that the "run"
+        command automatically does this when in interactive mode.""")
+
+    return parser
+
+
 def _exit(signo, _):
     name = next(k for k, v in signal.__dict__.iteritems()
                 if v == signo and "_" not in k)
@@ -307,13 +382,22 @@ def _exit(signo, _):
 
 
 def cmd_run(args, node):
-    if args.mode == "interactive":
-        branch_name = _get_snapshot_branch_name(node.portal)
+    j = cmd_run_prep(args, node.portal)
+    return cmd_run_body(args, node, j)
+
+
+JobPrepResult = namedtuple(
+    "JobPrepResult", "branch_name commit_sha category tags")
+
+
+def cmd_run_prep(args, portal):
+    if args.mode in ["interactive", "pytest"]:
+        branch_name = _get_snapshot_branch_name(portal)
 
     if args.test_pack_revision:
         commit_sha = args.test_pack_revision
     else:
-        if args.mode == "interactive":
+        if args.mode in ["interactive", "pytest"]:
             commit_sha = TestPack(remote=args.git_remote) \
                          .push_git_snapshot(branch_name)
         elif args.mode in ["bamboo", "jenkins"]:
@@ -326,7 +410,7 @@ def cmd_run(args, node):
     if args.category:
         category = args.category
     else:
-        if args.mode == "interactive":
+        if args.mode in ["interactive", "pytest"]:
             category = branch_name
         elif args.mode == "jenkins":
             category = os.environ["JOB_NAME"]
@@ -368,15 +452,26 @@ def cmd_run(args, node):
             die("Duplicate --tag name: %s" % name)
         tags[name] = value
 
+    return JobPrepResult(branch_name, commit_sha, category, tags)
+
+
+def cmd_run_body(args, node, j):
     logger.info("Running tests...")
 
+    try:
+        root = find_test_pack_root()
+        test_cases = [os.path.relpath(x, root).replace('\\', '/')
+                      for x in args.test_cases]
+    except NotInTestPack:
+        test_cases = args.test_cases
+
     job = node.run_tests(
-        commit_sha, args.test_cases, args.remote_control, category,
-        args.soak, args.shuffle, tags, args.force, await_completion=True)
+        j.commit_sha, test_cases, args.remote_control, j.category,
+        args.soak, args.shuffle, j.tags, args.force, await_completion=True)
 
     results = job.list_results()
 
-    if args.mode == "interactive":
+    if args.mode in ["interactive", 'pytest']:
         for result in results:
             print ""
             print result.json["triage_url"]
@@ -395,10 +490,15 @@ def cmd_run(args, node):
     print "View these test results at: %s/app/#/results?filter=job:%s" % (
         node.portal.url(), job.job_uid)
 
-    if all(result.is_ok() for result in results):
+    if args.mode == "pytest":
+        for result in results:
+            result.raise_for_result()
         return 0
     else:
-        return 1
+        if all(result.is_ok() for result in results):
+            return 0
+        else:
+            return 1
 
 
 def cmd_screenshot(args, node):
@@ -418,6 +518,10 @@ def _get_snapshot_branch_name(portal):
     return "%s/snapshot" % username
 
 
+class NotInTestPack(Exception):
+    pass
+
+
 def find_test_pack_root():
     """Walks upward from the current directory until it finds a directory
     containing .stbt.conf
@@ -427,8 +531,9 @@ def find_test_pack_root():
         if os.path.exists(os.path.join(root, '.stbt.conf')):
             return root
         root = os.path.split(root)[0]
-    raise Exception("""Didn't find "stbt.conf" at the root of your test-pack """
-                    """(starting at %s)""" % os.getcwd())
+    raise NotInTestPack(
+        """Didn't find ".stbt.conf" at the root of your test-pack """
+        """(starting at %s)""" % os.getcwd())
 
 
 def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
@@ -460,7 +565,8 @@ def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
                 "variable bamboo.STBT_AUTH_PASSWORD")
         return
 
-    assert mode == "interactive", "Unreachable: Unknown mode %s" % mode
+    assert mode in ["interactive", "pytest"], \
+        "Unreachable: Unknown mode %s" % mode
 
     keyring = None
     try:
@@ -513,6 +619,14 @@ def read_stbt_conf(root):
         "Traversing .stbt.conf symlinks failed: Symlink depth too great")
 
 
+class TestFailure(AssertionError):
+    result = 'fail'
+
+
+class TestError(Exception):
+    result = 'error'
+
+
 class Result(object):
     def __init__(self, portal, result_json):
         self._portal = portal
@@ -528,6 +642,21 @@ class Result(object):
 
     def is_ok(self):
         return self.json['result'] == "pass"
+
+    def raise_for_result(self):
+        if self.json['result'] == 'pass':
+            return
+
+        if 'traceback' not in self.json:
+            response = self._portal._get(
+                '/api/v2/results%s' % self.json['result_id'])
+            response.raise_for_status()
+            self.json = response.json()
+
+        if self.json['result'] == 'error':
+            raise TestError(self.json['traceback'])
+        elif self.json['result'] == 'fail':
+            raise TestFailure(self.json['traceback'])
 
 
 class TestJob(object):
@@ -807,37 +936,115 @@ class TestPack(object):
         return commit_sha
 
 
-def _list_test_cases(prefix, **_kwargs):
-    """Used for command-line tab-completion."""
+try:
+    import pytest
 
-    if "::" in prefix:
-        # List testcases in the file.
-        filename = prefix.split("::")[0]
-        tests = []
-        for line in open(filename):
-            m = re.match(r"^def\s+(test_[a-zA-Z0-9_]+)", line)
-            if m:
-                tests.append(filename + "::" + m.group(1))
-        return tests
-
-    else:
-        # List files:
-        return [f + "::"
-                for f in subprocess.check_output(
-                    ["git", "ls-files", "tests/**.py"]).strip().split("\n")]
+    def pytest_addoption(parser):
+        group = parser.getgroup("stbt", "stb-tester REST API")
+        for arg in itertools.chain(ARGS, RUN_ARGS):
+            if arg.cmdline_only:
+                continue
+            d = {k: v for k, v in arg._asdict().items()
+                 if (k not in ['name', 'completer', 'cmdline_only'] and
+                     v is not None)}
+            group.addoption(arg.longname, **d)
 
 
-def _list_node_ids(**_kwargs):
-    """Used for command-line tab-completion.
+    def pytest_collect_file(path, parent):
+        if path.ext == ".py":
+            return StbtCollector(path, parent)
+        else:
+            return None
 
-    For lack of a better place too look, looks for configuration files in
-    config/test-farm -- see https://stb-tester.com/manual/advanced-configuration#node-specific-configuration-files
-    """
 
-    return [f[17:-5]
-            for f in subprocess.check_output(
-                ["git", "ls-files", "config/test-farm/stb-tester-*.conf"])
-            .strip().split("\n")]
+    class StbtCollector(pytest.File):
+        def collect(self):
+            with open(self.name) as f:
+                # We implement our own parsing to avoid import stbt ImportErrors
+                for line in f:
+                    m = re.match(r'^def\s+(test_[a-zA-Z0-9_]*)', line)
+                    if m:
+                        yield StbtRemoteTest(self, self.name, m.group(1))
+
+
+    class StbtRemoteTest(pytest.Item):
+        def __init__(self, parent, filename, testname):
+            super(StbtRemoteTest, self).__init__(testname, parent)
+            self._filename = filename
+            self._testname = testname
+
+        def __repr__(self):
+            return "StbtRemoteTest(%r, %r)" % (self._filename, self._testname)
+
+        def runtest(self):
+            j = self.session.stbt_run_prep
+            try:
+                self.session.stbt_args.test_cases = ["%s::%s" % (
+                    self._filename, self._testname)]
+                cmd_run_body(self.session.stbt_args, self.session.stbt_node, j)
+            except requests.exceptions.HTTPError as e:
+                message = "HTTP %i Error: %s" % (
+                    e.response.status_code, e.response.text)
+                if hasattr(e, "request"):
+                    message += " during %s %s" % (
+                        e.request.method, e.request.url)  # pylint:disable=no-member
+                sys.stderr.write(message + '\n')
+                raise
+            finally:
+                self.session.stbt_args.test_cases = None
+
+
+    class Args(object):
+        """Pretends to be the result of calling `argparser` `parse_args` so we
+        can reuse code from stbt_rig for filling in the details"""
+        def __init__(self, config):
+            for arg in itertools.chain(ARGS, RUN_ARGS):
+                dest = arg.dest or arg.longname.strip('-').replace('-', '_')
+                if arg.cmdline_only:
+                    setattr(self, dest, arg.default)
+                else:
+                    setattr(self, dest, config.getvalue(dest))
+
+            self.test_cases = None
+            self.mode = "pytest"
+            self.command = "run"
+
+
+    def pytest_sessionstart(session):
+        args = Args(session.config)
+        session.stbt_args = args
+        resolve_args(session.stbt_args)
+
+        capmanager = session.config.pluginmanager.getplugin('capturemanager')
+        capmanager.suspend_global_capture(in_=True)
+        for portal_auth_token in iter_portal_auth_tokens(
+                args.portal_url, args.portal_auth_file, args.mode):
+            try:
+                portal = Portal(args.portal_url, portal_auth_token)
+                node = Node(portal, session.config.getvalue("node_id"))
+
+                j = cmd_run_prep(args, portal)
+                break
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 403:
+                    # Unauthorised. Try again, but with a new password.
+                    logger.error('Authentication failure with token "...%s"',
+                                 portal_auth_token[-8:])
+                else:
+                    message = "HTTP %i Error: %s" % (
+                        e.response.status_code, e.response.text)
+                    if hasattr(e, "request"):
+                        message += " during %s %s" % (
+                            e.request.method, e.request.url)  # pylint:disable=no-member
+                    die(message)
+
+        capmanager.resume_global_capture()
+
+        session.stbt_node = node
+        session.stbt_run_prep = j
+except ImportError:
+    # Pytest integration is optional
+    pass
 
 
 @contextmanager
