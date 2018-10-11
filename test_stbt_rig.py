@@ -221,12 +221,6 @@ def test_run_tests_interactive(capsys, test_pack, tmpdir, portal_mock):
         """) % portal_mock.url
     assert capsys.readouterr().out[-len(expected_stdout):] == expected_stdout
 
-    portal_mock.expect_run_tests(test_cases=['tests/test.py::test_my_tests'],
-                                 node_id="mynode")
-    assert 0 == stbt_rig.main([
-        'stbt_rig.py', '--node-id=mynode', '--portal-url=%s' % portal_mock.url,
-        '--portal-auth-file=token', 'run', 'tests/test.py::test_my_tests'])
-
     os.chdir('tests')
     portal_mock.expect_run_tests(test_cases=['tests/test.py::test_my_tests'],
                                  node_id="mynode")
