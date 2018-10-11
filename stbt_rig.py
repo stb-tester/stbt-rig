@@ -962,7 +962,7 @@ try:
             with open(self.name) as f:
                 # We implement our own parsing to avoid import stbt ImportErrors
                 for line in f:
-                    m = re.match(r'def (test_.*)\s*\(\):\s*$', line)
+                    m = re.match(r'^def\s+(test_[a-zA-Z0-9_]*)', line)
                     if m:
                         yield StbtRemoteTest(self, self.name, m.group(1))
 
