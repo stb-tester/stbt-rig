@@ -532,7 +532,7 @@ def find_test_pack_root():
             return root
         root = os.path.split(root)[0]
     raise NotInTestPack(
-        """Didn't find "stbt.conf" at the root of your test-pack """
+        """Didn't find ".stbt.conf" at the root of your test-pack """
         """(starting at %s)""" % os.getcwd())
 
 
