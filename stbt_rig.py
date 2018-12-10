@@ -845,10 +845,10 @@ class Portal(object):
             job.await_completion(timeout=timeout)
             return job
 
-    def _get(self, endpoint, **kwargs):
-        return self._session.get(self.url(endpoint), **kwargs)
+    def _get(self, endpoint, timeout=60, **kwargs):
+        return self._session.get(self.url(endpoint), timeout=timeout, **kwargs)
 
-    def _post(self, endpoint, json=None, headers=None, **kwargs):  # pylint:disable=redefined-outer-name
+    def _post(self, endpoint, json=None, headers=None, timeout=60, **kwargs):  # pylint:disable=redefined-outer-name
         from json import dumps
         if headers is None:
             headers = {}
@@ -859,7 +859,8 @@ class Portal(object):
         if json is not None:
             headers['Content-Type'] = 'application/json'
             kwargs['data'] = dumps(json)
-        r = self._session.post(self.url(endpoint), headers=headers, **kwargs)
+        r = self._session.post(
+            self.url(endpoint), headers=headers, timeout=timeout, **kwargs)
         return r
 
 
