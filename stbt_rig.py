@@ -695,12 +695,13 @@ class TestJob(object):
             if time.time() > end_time:
                 raise TimeoutException(
                     "Timeout waiting for job %s to complete" % self.job_uid)
-            if self.get_status() != TestJob.RUNNING:
+            if self.get_status(timeout=min(end_time - time.time(), 600)) != \
+                    TestJob.RUNNING:
                 logger.debug("Job complete %s", self.job_uid)
                 return
             try:
                 self._get('/await_completion',
-                          timeout=min(end_time - time.time(), 60))
+                          timeout=min(end_time - time.time(), 600))
             except requests.exceptions.Timeout:
                 pass
 
@@ -722,12 +723,12 @@ class TestJob(object):
         r.raise_for_status()
         return r.content
 
-    def get_status(self):
+    def get_status(self, timeout=60):
         if self._json.get('status') == 'exited':
             # If we were "exited" in the past, then we'll still be "exited" now:
             # Save making another HTTP request
             return TestJob.EXITED
-        self._update()
+        self._json = self._get(timeout=timeout).json()
         return self._json['status']
 
     def _get(self, path="", **kwargs):
@@ -741,9 +742,6 @@ class TestJob(object):
             '/api/v2/jobs%s%s' % (self.job_uid, path), **kwargs)
         r.raise_for_status()
         return r
-
-    def _update(self):
-        self._json = self._get().json()
 
 
 class TimeoutException(RuntimeError):
@@ -799,7 +797,8 @@ class Portal(object):
         session.headers.update({
             "Authorization": "token %s" % auth_token,
             "User-Agent": "stbt-rig"})
-        self._session = session
+        self._session = RetrySession(
+            timeout=1e9, session=session, logger=logger)
 
     def url(self, endpoint=""):
         if endpoint.startswith(self._url):
@@ -938,6 +937,84 @@ class TestPack(object):
             [self.remote,
              '%s:refs/heads/%s' % (commit_sha, branch)])
         return commit_sha
+
+
+class RetrySession(object):
+    """
+    Emulates a requests session but with retry and timeout logic for a sequence
+    of HTTP requests.
+    """
+    def __init__(self, timeout, session=None, interval=1,
+                 logger=logging.getLogger('retry_session'),  # pylint: disable=redefined-outer-name
+                 _time=None):
+        if session is None:
+            session = requests.Session()
+        if _time is None:
+            _time = time
+
+        self._time = _time
+        self._session = session
+        self._end_time = self._time.time() + timeout
+        self._interval = interval
+        self._logger = logger
+
+    def put(self, url, data=None, **kwargs):
+        return self.request('put', url, data=data, **kwargs)
+
+    def post(self, url, data=None, json=None, **kwargs):
+        return self.request('post', url, data=data, json=json, **kwargs)
+
+    def get(self, url, params=None, **kwargs):
+        kwargs.setdefault('allow_redirects', True)
+        return self.request('get', url, params=params, **kwargs)
+
+    def request(self, method, url, timeout=None, **kwargs):
+        last_exc_info = (None, None, None)
+        if timeout:
+            end_time = self._time.time() + timeout
+        else:
+            end_time = self._end_time
+        # We'll double interval below:
+        interval = self._interval / 2.
+        while True:
+            now = self._time.time()
+            if now >= end_time:
+                self._logger.warning(
+                    "Timed out making request %s %s", method, url,
+                    exc_info=last_exc_info)
+                if last_exc_info[0] is not None:
+                    raise last_exc_info[0], last_exc_info[1], last_exc_info[2]  # pylint: disable=raising-bad-type
+                else:
+                    raise RetryTimeout()
+
+            # We have a global timeout: we don't want any single request to
+            # take longer than 1/2 of the time remaining to allow for retries
+            kwargs.setdefault('timeout', max((end_time - now) / 2, 1))
+            response = None
+            try:
+                response = self._session.request(method, url, **kwargs)
+                # Success or 4xx client error: don't retry:
+                if response.status_code < 500:
+                    # Avoid traceback circular references:
+                    del last_exc_info
+                    return response
+                response.raise_for_status()
+            except requests.RequestException as e:
+                # Exponential backoff up to 30s
+                interval = max(
+                    self._interval,
+                    min(interval * 2, 30, end_time - time.time() - 1))
+                self._logger.info(
+                    "request %s %s failed.  Will retry in %is", method, url,
+                    interval, exc_info=True)
+                if e.response:
+                    self._logger.info('Got response %r', e.response.text)
+                last_exc_info = sys.exc_info()
+                self._time.sleep(interval)
+
+
+class RetryTimeout(requests.exceptions.Timeout):
+    pass
 
 
 try:
