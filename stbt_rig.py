@@ -793,10 +793,13 @@ class Node(object):
 class Portal(object):
     def __init__(self, url, auth_token, readonly=False):
         self._url = url
-        self._auth_token = auth_token
         self.readonly = readonly
-        self._session = requests.session()
-        self._session.headers.update({"User-Agent": "stbt-rig"})
+
+        session = requests.session()
+        session.headers.update({
+            "Authorization": "token %s" % auth_token,
+            "User-Agent": "stbt-rig"})
+        self._session = session
 
     def url(self, endpoint=""):
         if endpoint.startswith(self._url):
@@ -842,17 +845,13 @@ class Portal(object):
             job.await_completion(timeout=timeout)
             return job
 
-    def _get(self, endpoint, headers=None, **kwargs):
-        if headers is None:
-            headers = {}
-        headers["Authorization"] = "token %s" % self._auth_token
-        return self._session.get(self.url(endpoint), headers=headers, **kwargs)
+    def _get(self, endpoint, **kwargs):
+        return self._session.get(self.url(endpoint), **kwargs)
 
     def _post(self, endpoint, json=None, headers=None, **kwargs):  # pylint:disable=redefined-outer-name
         from json import dumps
         if headers is None:
             headers = {}
-        headers["Authorization"] = "token %s" % self._auth_token
         if self.readonly:
             raise RuntimeError(
                 "Not allowed to mutate this TestRunner, please use a different "
