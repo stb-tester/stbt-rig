@@ -684,7 +684,7 @@ class TestJob(object):
 
     def stop(self):
         if self.get_status() != TestJob.EXITED:
-            self._post('/stop').raise_for_status()
+            self._post('/stop', retry=True).raise_for_status()
 
     def await_completion(self, timeout=None):
         if timeout is None:
@@ -968,12 +968,18 @@ class RetrySession(object):
         kwargs.setdefault('allow_redirects', True)
         return self.request('get', url, params=params, **kwargs)
 
-    def request(self, method, url, timeout=None, **kwargs):
+    def request(self, method, url, timeout=None, retry=None, **kwargs):
         last_exc_info = (None, None, None)
         if timeout:
             end_time = self._time.time() + timeout
         else:
             end_time = self._end_time
+        if retry is None:
+            # GET and PUT are idempotent
+            retry = method.lower() in ['get', 'put']
+        if not retry:
+            return self._session.request(method, url, timeout=timeout, **kwargs)
+
         # We'll double interval below:
         interval = self._interval / 2.
         while True:
