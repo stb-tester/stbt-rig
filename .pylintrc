@@ -8,6 +8,7 @@ reports=no
 
 [MESSAGES CONTROL]
 disable=
+  global-statement,
   invalid-name,
   locally-disabled,
   locally-enabled,
