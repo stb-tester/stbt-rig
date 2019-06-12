@@ -37,7 +37,6 @@ except ImportError:
         pass
 
 
-killed = False
 logger = logging.getLogger("stbt_rig")
 
 
@@ -375,8 +374,6 @@ def argparser():
 
 
 def _exit(signo, _):
-    global killed
-    killed = True
     name = next(k for k, v in signal.__dict__.iteritems()
                 if v == signo and "_" not in k)
     logger.warning("Received %s. Stopping job.", name)
@@ -470,7 +467,12 @@ def cmd_run_body(args, node, j):
 
     job = node.run_tests(
         j.commit_sha, test_cases, args.remote_control, j.category,
-        args.soak, args.shuffle, j.tags, args.force, await_completion=True)
+        args.soak, args.shuffle, j.tags, args.force)
+
+    try:
+        job.await_completion()
+    except SystemExit:  # raised by our signal handler
+        job.stop()
 
     results = job.list_results()
 
@@ -679,8 +681,7 @@ class TestJob(object):
         return self
 
     def __exit__(self, _1, _2, _3):
-        if killed:
-            self.stop()
+        self.stop()
 
     def stop(self):
         if self.get_status() != TestJob.EXITED:
