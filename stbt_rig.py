@@ -467,7 +467,12 @@ def cmd_run_body(args, node, j):
 
     job = node.run_tests(
         j.commit_sha, test_cases, args.remote_control, j.category,
-        args.soak, args.shuffle, j.tags, args.force, await_completion=True)
+        args.soak, args.shuffle, j.tags, args.force)
+
+    try:
+        job.await_completion()
+    except SystemExit:  # raised by our signal handler
+        job.stop()
 
     results = job.list_results()
 
