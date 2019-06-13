@@ -6,7 +6,7 @@
 For more details, and to get the latest version of this script, see
 <https://github.com/stb-tester/stbt-rig>.
 
-Copyright 2017-2018 Stb-tester.com Ltd. <support@stb-tester.com>
+Copyright 2017-2019 Stb-tester.com Ltd. <support@stb-tester.com>
 Released under the MIT license.
 """
 
@@ -386,8 +386,7 @@ def cmd_run(args, node):
     return cmd_run_body(args, node, j)
 
 
-JobPrepResult = namedtuple(
-    "JobPrepResult", "branch_name commit_sha category tags")
+JobPrepResult = namedtuple("JobPrepResult", "commit_sha category tags")
 
 
 def cmd_run_prep(args, portal):
@@ -452,7 +451,7 @@ def cmd_run_prep(args, portal):
             die("Duplicate --tag name: %s" % name)
         tags[name] = value
 
-    return JobPrepResult(branch_name, commit_sha, category, tags)
+    return JobPrepResult(commit_sha, category, tags)
 
 
 def cmd_run_body(args, node, j):

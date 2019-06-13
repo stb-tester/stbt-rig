@@ -147,6 +147,11 @@ class PortalMock(object):
                 "result_id": "/mynode/6Pfq/167/2018-10-10_13.13.20",
               }])
 
+        @self.app.route('/api/v2/results.xml')
+        def get_results_xml():
+            assert flask.request.args['filter'] == 'job:/mynode/6Pfq/167'
+            return PortalMock.RESULTS_XML
+
         @self.app.route(
             "/api/v2/results/mynode/6Pfq/167/2018-10-10_13.13.20/stbt.log")
         def get_stbt_log():
@@ -199,6 +204,14 @@ class PortalMock(object):
             assert j[k] == v
         return {'job_uid': '/mynode/6Pfq/167'}
 
+    RESULTS_XML = (
+        '<testsuite disabled="0" errors="0" failures="0" '
+        'name="test" skipped="0" tests="1" time="3.270815" '
+        'timestamp="2019-06-12T15:26:35">'
+        '<testcase classname="tests/test.py" name="test_my_tests" '
+        'time="3.270815"/>'
+        '</testsuite>')
+
 
 @pytest.fixture()
 def portal_mock():
@@ -248,3 +261,34 @@ def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
         'python', '-m', 'py.test', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
         '--portal-url=%s' % portal_mock.url, '--portal-auth-file=../token',
         '--node-id=mynode', 'test.py::test_my_tests'], env=env)
+
+
+def test_run_tests_jenkins(tmpdir, portal_mock):
+    env = os.environ.copy()
+    env["JENKINS_HOME"] = tmpdir
+    env["STBT_AUTH_TOKEN"] = "this is my token"
+    env["BUILD_ID"] = "1"
+    env["BUILD_URL"] = "https://jenkins/job/test/1"
+    env["JOB_NAME"] = "test"
+    run_tests_ci(portal_mock, env)
+
+
+def test_run_tests_bamboo(tmpdir, portal_mock):
+    env = os.environ.copy()
+    env["bamboo_agentWorkingDirectory"] = tmpdir
+    env["bamboo_STBT_AUTH_PASSWORD"] = "this is my token"
+    env["bamboo_shortJobName"] = "test"
+    env["bamboo_buildPlanName"] = "test"
+    env["bamboo_buildResultKey"] = "1"
+    run_tests_ci(portal_mock, env)
+
+
+def run_tests_ci(portal_mock, env):
+    portal_mock.expect_run_tests(test_cases=["tests/test.py::test_my_tests"],
+                                 node_id="mynode")
+    subprocess.check_call(
+        ["python", stbt_rig.__file__, "--node-id=mynode",
+         "--portal-url", portal_mock.url,
+         "run", "tests/test.py::test_my_tests"],
+        env=env)
+    assert open("stbt-results.xml").read() == PortalMock.RESULTS_XML
