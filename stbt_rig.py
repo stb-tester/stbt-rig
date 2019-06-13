@@ -811,9 +811,15 @@ class TestJob(object):
     def __exit__(self, _1, _2, _3):
         self.stop()
 
-    def stop(self):
+    def stop(self, timeout=600):
         if self.get_status() != TestJob.EXITED:
-            self._post('/stop', retry=True).raise_for_status()
+            # Sometimes jobs take a long time to stop (uploading artifacts);
+            # in that case we get 202 Accepted after 55s to avoid other HTTP
+            # server or client timeouts.
+            # The "<job_id>/stop" endpoint is idempotent so it's safe to retry.
+            self._post('/stop', timeout=timeout,
+                       retry=True, retry_codes=[202]) \
+                .raise_for_status()
 
     def await_completion(self, timeout=None):
         if timeout is None:
@@ -1104,7 +1110,8 @@ class RetrySession(object):
         kwargs.setdefault('allow_redirects', True)
         return self.request('get', url, params=params, **kwargs)
 
-    def request(self, method, url, timeout=None, retry=None, **kwargs):
+    def request(self, method, url, timeout=None, retry=None, retry_codes=(),
+                **kwargs):
         last_exc_info = (None, None, None)
         if timeout:
             end_time = self._time.time() + timeout
@@ -1136,7 +1143,8 @@ class RetrySession(object):
             try:
                 response = self._session.request(method, url, **kwargs)
                 # Success or 4xx client error: don't retry:
-                if response.status_code < 500:
+                if (response.status_code < 500 and
+                        response.status_code not in retry_codes):
                     # Avoid traceback circular references:
                     del last_exc_info
                     return response
