@@ -10,8 +10,10 @@ Copyright 2017-2019 Stb-tester.com Ltd. <support@stb-tester.com>
 Released under the MIT license.
 """
 
+from __future__ import (
+    absolute_import, division, print_function, unicode_literals)
+
 import argparse
-import ConfigParser
 import itertools
 import logging
 import os
@@ -28,6 +30,12 @@ from textwrap import dedent
 
 # Third-party libraries. Keep this list to a minimum to ease deployment.
 import requests
+
+try:
+    import configparser
+except ImportError:
+    # Python 2
+    import ConfigParser as configparser
 
 try:
     # Bash tab-completion, if python-argcomplete is installed
@@ -74,7 +82,7 @@ def resolve_args(args):
         try:
             _, config_parser = read_stbt_conf(find_test_pack_root())
             args.portal_url = config_parser.get('test_pack', 'portal_url')
-        except ConfigParser.Error as e:
+        except configparser.Error as e:
             die("--portal-url isn't specified on the command line and "
                 "test_pack.portal_url isn't specified in .stbt.conf: %s", e)
 
@@ -374,7 +382,7 @@ def argparser():
 
 
 def _exit(signo, _):
-    name = next(k for k, v in signal.__dict__.iteritems()
+    name = next(k for k, v in signal.__dict__.items()
                 if v == signo and "_" not in k)
     logger.warning("Received %s. Stopping job.", name)
     # Teardown is handled by TestJob.__exit__
@@ -477,8 +485,8 @@ def cmd_run_body(args, node, j):
 
     if args.mode in ["interactive", 'pytest']:
         for result in results:
-            print ""
-            print result.json["triage_url"]
+            print("")
+            print(result.json["triage_url"])
             result.print_logs()
     elif args.mode in ["bamboo", "jenkins"]:
         # Record results in XML format for the Jenkins JUnit plugin
@@ -491,8 +499,8 @@ def cmd_run_body(args, node, j):
         with open(args.csv, "w") as f:
             f.write(results_csv)
 
-    print "View these test results at: %s/app/#/results?filter=job:%s" % (
-        node.portal.url(), job.job_uid)
+    print("View these test results at: %s/app/#/results?filter=job:%s" % (
+        node.portal.url(), job.job_uid))
 
     if args.mode == "pytest":
         for result in results:
@@ -600,13 +608,13 @@ def read_stbt_conf(root):
     traverse them for the purposes of loading .stbt.conf.
     """
     root = os.path.abspath(root)
-    cp = ConfigParser.SafeConfigParser()
+    cp = configparser.SafeConfigParser()
     filename = os.path.join(root, '.stbt.conf')
     for _ in range(10):
         try:
             cp.read(filename)
             return os.path.relpath(filename, root), cp
-        except ConfigParser.MissingSectionHeaderError:
+        except configparser.MissingSectionHeaderError:
             if os.name == "posix":
                 # POSIX systems can support symlinks so something else must have
                 # gone wrong.
@@ -989,7 +997,7 @@ class RetrySession(object):
                     "Timed out making request %s %s", method, url,
                     exc_info=last_exc_info)
                 if last_exc_info[0] is not None:
-                    raise last_exc_info[0], last_exc_info[1], last_exc_info[2]  # pylint: disable=raising-bad-type
+                    raise_(last_exc_info[0], last_exc_info[1], last_exc_info[2])
                 else:
                     raise RetryTimeout()
 
@@ -1147,6 +1155,34 @@ def named_temporary_directory(suffix='', prefix='tmp', dir=None,
 def die(message, *args):
     logger.error(message, *args)
     sys.exit(1)
+
+
+# Python 2 & 3 compatible way of raising an exception with traceback.
+# Copied from python-future so that we don't have to add a dependency.
+if sys.version_info.major == 3:
+    def raise_(tp, value=None, tb=None):
+        """
+        A function that matches the Python 2.x ``raise`` statement. This
+        allows re-raising exceptions with the cls value and traceback on
+        Python 2 and 3.
+        """
+        if value is not None and isinstance(tp, Exception):
+            raise TypeError("instance exception may not have a separate value")
+        if value is not None:
+            exc = tp(value)
+        else:
+            exc = tp
+        if exc.__traceback__ is not tb:
+            raise exc.with_traceback(tb)
+        raise exc
+else:
+    # `raise a, b, c` is a syntax error on Python 3 (even though we don't run
+    # this block with Python 3, Python still has to parse it). Hence `exec`.
+    exec(  # pylint:disable=exec-used
+        dedent('''\
+        def raise_(tp, value=None, tb=None):
+            raise tp, value, tb
+        '''))
 
 
 if __name__ == '__main__':
