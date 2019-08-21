@@ -882,19 +882,14 @@ class TestPack(object):
         self.root = root
         self.remote = remote
 
-    def _git(self, cmd, capture_output=True, extra_env=None, **kwargs):  # pylint:disable=no-self-use
-        if capture_output:
-            call = subprocess.check_output
-        else:
-            call = subprocess.check_call
-
+    def _git(self, cmd, extra_env=None, **kwargs):  # pylint:disable=no-self-use
         env = kwargs.get('env', os.environ).copy()
         if extra_env:
             env.update(extra_env)
 
         logger.debug('+git %s', " ".join(cmd))
 
-        return call(["git"] + cmd, env=env, **kwargs)
+        return subprocess.check_output(["git"] + cmd, env=env, **kwargs)
 
     def get_sha(self, branch='HEAD', obj_type=None):
         if obj_type:
