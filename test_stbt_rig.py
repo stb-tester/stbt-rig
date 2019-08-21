@@ -15,6 +15,7 @@ import pytest
 import requests
 
 import stbt_rig
+from stbt_rig import to_unicode
 
 
 @pytest.fixture(scope="function", name="tmpdir")
@@ -71,13 +72,13 @@ def assert_status_unmodified():
 
 
 def cat(revision, filename):
-    return subprocess.check_output(
-        ['git', 'cat-file', 'blob', "%s:%s" % (revision, filename)])
+    return to_unicode(subprocess.check_output(
+        ['git', 'cat-file', 'blob', "%s:%s" % (revision, filename)]))
 
 
 def rev_parse(revision):
-    return subprocess.check_output(
-        ['git', 'rev-parse', '--verify', revision]).strip()
+    return to_unicode(subprocess.check_output(
+        ['git', 'rev-parse', '--verify', revision])).strip()
 
 
 def test_testpack_snapshot_contains_modifications(test_pack):

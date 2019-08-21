@@ -156,8 +156,8 @@ def _list_node_ids(**_kwargs):
     """
 
     return [f[17:-5]
-            for f in subprocess.check_output(
-                ["git", "ls-files", "config/test-farm/stb-tester-*.conf"])
+            for f in to_unicode(subprocess.check_output(
+                ["git", "ls-files", "config/test-farm/stb-tester-*.conf"]))
             .strip().split("\n")]
 
 
@@ -177,8 +177,8 @@ def _list_test_cases(prefix, **_kwargs):
     else:
         # List files:
         return [f + "::"
-                for f in subprocess.check_output(
-                    ["git", "ls-files", "tests/**.py"]).strip().split("\n")]
+                for f in to_unicode(subprocess.check_output(
+                    ["git", "ls-files", "tests/**.py"])).strip().split("\n")]
 
 
 ARGPARSE_EPILOGUE = dedent("""\
@@ -889,7 +889,8 @@ class TestPack(object):
 
         logger.debug('+git %s', " ".join(cmd))
 
-        return subprocess.check_output(["git"] + cmd, env=env, **kwargs)
+        return to_unicode(
+            subprocess.check_output(["git"] + cmd, env=env, **kwargs))
 
     def get_sha(self, branch='HEAD', obj_type=None):
         if obj_type:
@@ -1150,6 +1151,20 @@ def named_temporary_directory(suffix='', prefix='tmp', dir=None,
 def die(message, *args):
     logger.error(message, *args)
     sys.exit(1)
+
+
+def to_bytes(text):
+    if isinstance(text, bytes):
+        return text
+    else:
+        return text.encode("utf-8", errors="backslashreplace")
+
+
+def to_unicode(text):
+    if isinstance(text, bytes):
+        return text.decode("utf-8", errors="replace")
+    else:
+        return text
 
 
 # Python 2 & 3 compatible way of raising an exception with traceback.
