@@ -1,0 +1,15 @@
+FROM ubuntu:18.04
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt update && \
+    apt install -y \
+        git \
+        python-pip && \
+    pip install \
+        keyring \
+        requests \
+        requests-mock \
+        pytest \
+        pylint==1.9.3 \
+        astroid==1.6.5 \
+        flask==1.0.2 \
+        werkzeug==0.14.1
