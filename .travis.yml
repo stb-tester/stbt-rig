@@ -9,4 +9,4 @@ install:
 
 script:
 - pylint stbt_rig.py
-- py.test -vv
+- pytest -vv
