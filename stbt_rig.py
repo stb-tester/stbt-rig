@@ -650,7 +650,7 @@ class Result(object):
         response = self._portal._get(
             '/api/v2/results%s/stbt.log' % self.json['result_id'])
         response.raise_for_status()
-        stream.write(response.content)
+        stream.write(response.text)
 
     def is_ok(self):
         return self.json['result'] == "pass"
@@ -723,13 +723,13 @@ class TestJob(object):
         r = self.portal._get(
             '/api/v2/results.xml', params={'filter': 'job:%s' % self.job_uid})
         r.raise_for_status()
-        return r.content
+        return r.text
 
     def list_results_csv(self):
         r = self.portal._get(
             '/api/v2/results.csv', params={'filter': 'job:%s' % self.job_uid})
         r.raise_for_status()
-        return r.content
+        return r.text
 
     def get_status(self, timeout=60):
         if self._json.get('status') == 'exited':
@@ -784,7 +784,7 @@ class Node(object):
     def save_screenshot(self, filename):
         r = self._get("screenshot.png")
         r.raise_for_status()
-        with open(filename, 'w') as f:
+        with open(filename, 'wb') as f:
             f.write(r.content)
 
     def _get(self, suffix="", **kwargs):
