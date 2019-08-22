@@ -9,6 +9,7 @@ import threading
 import time
 import subprocess
 from contextlib import contextmanager
+from sys import executable as python
 from textwrap import dedent
 
 import pytest
@@ -254,7 +255,7 @@ def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
     env = os.environ.copy()
     env['PYTHONPATH'] = os.path.dirname(os.path.abspath(__file__))
     subprocess.check_call([
-        'python', '-m', 'py.test', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
+        python, '-m', 'py.test', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
         '--portal-url=%s' % portal_mock.url, '--portal-auth-file=token',
         '--node-id=mynode', 'tests/test.py::test_my_tests'], env=env)
 
@@ -262,7 +263,7 @@ def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
     portal_mock.expect_run_tests(test_cases=['tests/test.py::test_my_tests'],
                                  node_id="mynode")
     subprocess.check_call([
-        'python', '-m', 'py.test', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
+        python, '-m', 'py.test', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
         '--portal-url=%s' % portal_mock.url, '--portal-auth-file=../token',
         '--node-id=mynode', 'test.py::test_my_tests'], env=env)
 
@@ -291,7 +292,7 @@ def run_tests_ci(portal_mock, env):
     portal_mock.expect_run_tests(test_cases=["tests/test.py::test_my_tests"],
                                  node_id="mynode")
     subprocess.check_call(
-        ["python", stbt_rig.__file__, "--node-id=mynode",
+        [python, stbt_rig.__file__, "--node-id=mynode",
          "--portal-url", portal_mock.url,
          "run", "tests/test.py::test_my_tests"],
         env=env)
