@@ -5,7 +5,7 @@ python:
 
 install:
 - cat /etc/os-release
-- pip install keyring requests requests-mock pytest pylint==1.9.3 astroid==1.6.5 flask==1.0.2 werkzeug==0.14.1
+- pip install keyring requests requests-mock pytest pylint==1.9.3 astroid==1.6.5 flask==1.1.1 werkzeug==0.15.5
 
 script:
 - pylint stbt_rig.py
