@@ -1,5 +1,4 @@
-from __future__ import (
-    absolute_import, division, print_function, unicode_literals)
+from __future__ import absolute_import, division, print_function
 
 import logging
 import os
@@ -16,7 +15,7 @@ import pytest
 import requests
 
 import stbt_rig
-from stbt_rig import to_unicode
+from stbt_rig import to_native_str, to_unicode
 
 
 @pytest.fixture(scope="function", name="tmpdir")
@@ -270,7 +269,7 @@ def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
 
 def test_run_tests_jenkins(tmpdir, portal_mock):
     env = os.environ.copy()
-    env["JENKINS_HOME"] = tmpdir
+    env["JENKINS_HOME"] = to_native_str(tmpdir)
     env["STBT_AUTH_TOKEN"] = "this is my token"
     env["BUILD_ID"] = "1"
     env["BUILD_URL"] = "https://jenkins/job/test/1"
@@ -280,7 +279,7 @@ def test_run_tests_jenkins(tmpdir, portal_mock):
 
 def test_run_tests_bamboo(tmpdir, portal_mock):
     env = os.environ.copy()
-    env["bamboo_agentWorkingDirectory"] = tmpdir
+    env["bamboo_agentWorkingDirectory"] = to_native_str(tmpdir)
     env["bamboo_STBT_AUTH_PASSWORD"] = "this is my token"
     env["bamboo_shortJobName"] = "test"
     env["bamboo_buildPlanName"] = "test"

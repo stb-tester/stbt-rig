@@ -887,6 +887,10 @@ class TestPack(object):
         if extra_env:
             env.update(extra_env)
 
+        # On Windows environment variables must be bytes on 2.7 and unicode on
+        # 3.0+
+        env = {to_native_str(k): to_native_str(v) for k, v in env.items()}
+
         logger.debug('+git %s', " ".join(cmd))
 
         return to_unicode(
@@ -1165,6 +1169,13 @@ def to_unicode(text):
         return text.decode("utf-8", errors="replace")
     else:
         return text
+
+
+def to_native_str(text):
+    if sys.version_info.major == 2:
+        return to_bytes(text)
+    else:
+        return to_unicode(text)
 
 
 # Python 2 & 3 compatible way of raising an exception with traceback.
