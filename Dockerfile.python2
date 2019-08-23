@@ -1,15 +1,9 @@
 FROM ubuntu:18.04
+ADD requirements.txt requirements.txt
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt update && \
     apt install -y \
         git \
         python-pip && \
-    pip install \
-        keyring \
-        requests \
-        requests-mock \
-        pytest \
-        pylint==1.9.3 \
-        astroid==1.6.5 \
-        flask==1.1.1 \
-        werkzeug==0.15.5
+    pip install -r requirements.txt && \
+    rm requirements.txt
