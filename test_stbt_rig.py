@@ -6,7 +6,6 @@ import re
 import socket
 import threading
 import time
-import subprocess
 from contextlib import contextmanager
 from sys import executable as python
 from textwrap import dedent
@@ -16,6 +15,12 @@ import requests
 
 import stbt_rig
 from stbt_rig import to_native_str, to_unicode
+
+try:
+    # Needed for timeout argument to wait on Python 2.7
+    import subprocess32 as subprocess
+except ImportError:
+    import subprocess
 
 
 @pytest.fixture(scope="function", name="tmpdir")
@@ -294,5 +299,5 @@ def run_tests_ci(portal_mock, env):
         [python, stbt_rig.__file__, "--node-id=mynode",
          "--portal-url", portal_mock.url,
          "run", "tests/test.py::test_my_tests"],
-        env=env)
+        env=env, timeout=10)
     assert open("stbt-results.xml").read() == PortalMock.RESULTS_XML
