@@ -594,6 +594,7 @@ def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
 
     while True:
         sys.stderr.write('Enter Access Token for portal %s: ' % portal_url)
+        sys.stderr.flush()
         token = sys.stdin.readline().strip()
         if token:
             if keyring is not None:
@@ -921,6 +922,7 @@ class TestPack(object):
             sys.stderr.write(
                 '\nTo avoid this warning add untracked files (with "git add") '
                 'or add them to .gitignore\n')
+            sys.stderr.flush()
 
         base_commit = self.get_sha(obj_type="commit")
 
@@ -1093,6 +1095,7 @@ try:
                     message += " during %s %s" % (
                         e.request.method, e.request.url)  # pylint:disable=no-member
                 sys.stderr.write(message + '\n')
+                sys.stderr.flush()
                 raise
             finally:
                 self.session.stbt_args.test_cases = None
