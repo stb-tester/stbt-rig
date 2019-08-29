@@ -45,6 +45,17 @@ def test_retrysession_retry_after_500():
             assert ctx.session.get('mock://test.com/path').text == 'ok'
 
 
+def test_retrysession_retry_after_202():
+    with retry_session_test_ctx() as ctx:
+        ctx.http_mock.register_uri(
+            'GET', '//test.com/path', [
+                {'text': 'retry', 'status_code': 202},
+                {'text': 'ok', 'status_code': 200},
+            ])
+        with ctx.time.assert_duration(seconds=0):
+            assert ctx.session.get('mock://test.com/path').text == 'ok'
+
+
 def test_retrysession_no_retry_after_400():
     with retry_session_test_ctx() as ctx:
         ctx.http_mock.register_uri(

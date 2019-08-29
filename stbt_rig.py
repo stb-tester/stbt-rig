@@ -817,9 +817,7 @@ class TestJob(object):
             # in that case we get 202 Accepted after 55s to avoid other HTTP
             # server or client timeouts.
             # The "<job_id>/stop" endpoint is idempotent so it's safe to retry.
-            self._post('/stop', timeout=timeout,
-                       retry=True, retry_codes=[202]) \
-                .raise_for_status()
+            self._post('/stop', timeout=timeout, retry=True).raise_for_status()
 
     def await_completion(self, timeout=None):
         if timeout is None:
@@ -1110,8 +1108,7 @@ class RetrySession(object):
         kwargs.setdefault('allow_redirects', True)
         return self.request('get', url, params=params, **kwargs)
 
-    def request(self, method, url, timeout=None, retry=None, retry_codes=(),
-                **kwargs):
+    def request(self, method, url, timeout=None, retry=None, **kwargs):
         last_exc_info = (None, None, None)
         if timeout:
             end_time = self._time.time() + timeout
@@ -1142,13 +1139,19 @@ class RetrySession(object):
             response = None
             try:
                 response = self._session.request(method, url, **kwargs)
-                # Success or 4xx client error: don't retry:
-                if (response.status_code < 500 and
-                        response.status_code not in retry_codes):
+                if response.status_code == 202:
+                    # We return 202 "Accepted" from our endpoints indicating
+                    # that we've started the requested operation, but haven't
+                    # finished yet.  Typically this is used for long-poll.  It's
+                    # the equivalent to a syscall returning EAGAIN.
+                    pass
+                elif response.status_code < 500:
                     # Avoid traceback circular references:
                     del last_exc_info
+                    # Success or 4xx client error: don't retry
                     return response
-                response.raise_for_status()
+                else:
+                    response.raise_for_status()
             except requests.RequestException as e:
                 # Exponential backoff up to 30s
                 interval = max(
