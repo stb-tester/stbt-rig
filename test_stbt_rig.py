@@ -128,6 +128,11 @@ class PortalMock(object):
 
         @self.app.before_request
         def check_auth():
+            if flask.request.path.startswith('/unauthorised.git'):
+                # Used for testing git username prompt behaviour
+                response = flask.make_response("Unauthorized", 401,
+                    {'WWW-Authenticate':'Basic realm="Login Required"'})
+                return response
             if (flask.request.headers['Authorization'] !=
                     "token this is my token"):
                 return ("Forbidden", 403)
@@ -270,6 +275,31 @@ def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
         python, '-m', 'pytest', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
         '--portal-url=%s' % portal_mock.url, '--portal-auth-file=../token',
         '--node-id=mynode', 'test.py::test_my_tests'], env=env)
+
+
+def test_run_tests_pytest_unauthorised(test_pack, tmpdir, portal_mock):
+    with open('token', 'w') as f:
+        f.write("this is my token")
+    env = os.environ.copy()
+    env['PYTHONPATH'] = os.path.dirname(os.path.abspath(__file__))
+    subprocess.check_call([
+        "git", "remote", "set-url", "origin",
+        "http://%s:%i/unauthorised.git" % portal_mock.address])
+    try:
+        subprocess.check_output([
+            python, '-m', 'pytest', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
+            '--portal-url=%s' % portal_mock.url, '--portal-auth-file=token',
+            '--node-id=mynode', 'tests/test.py::test_my_tests'], env=env,
+            stderr=subprocess.STDOUT)
+        assert False, "pytest should have failed with auth error"
+    except subprocess.CalledProcessError as e:
+        print(e.output)
+        assert (
+            (b"could not read Username for" in e.output and
+             b'terminal prompts disabled' in e.output) or
+            b"Authentication failed for" in e.output)
+    finally:
+        subprocess.check_call(["git", "remote", "set-url", "origin", "."])
 
 
 def test_run_tests_jenkins(tmpdir, portal_mock):

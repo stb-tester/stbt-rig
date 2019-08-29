@@ -404,9 +404,12 @@ def cmd_run_prep(args, portal):
     if args.test_pack_revision:
         commit_sha = args.test_pack_revision
     else:
-        if args.mode in ["interactive", "pytest"]:
+        if args.mode == "interactive":
             commit_sha = TestPack(remote=args.git_remote) \
                          .push_git_snapshot(branch_name)
+        elif args.mode == "pytest":
+            commit_sha = TestPack(remote=args.git_remote) \
+                         .push_git_snapshot(branch_name, interactive=False)
         elif args.mode in ["bamboo", "jenkins"]:
             # We assume that when in CI we're not in the git repo of the
             # test-pack, so run tests from master.
@@ -882,10 +885,15 @@ class TestPack(object):
         self.root = root
         self.remote = remote
 
-    def _git(self, cmd, extra_env=None, **kwargs):  # pylint:disable=no-self-use
+    @staticmethod
+    def _git(cmd, extra_env=None, interactive=False, **kwargs):
         env = kwargs.get('env', os.environ).copy()
         if extra_env:
             env.update(extra_env)
+        if not interactive:
+            if 'stdin' not in kwargs:
+                kwargs["stdin"] = open(os.devnull, "r")
+            env['GIT_TERMINAL_PROMPT'] = b'0'
 
         # On Windows environment variables must be bytes on 2.7 and unicode on
         # 3.0+
@@ -934,7 +942,7 @@ class TestPack(object):
                 ['commit-tree', write_tree, '-p', base_commit, '-m',
                  "snapshot"]).strip()
 
-    def push_git_snapshot(self, branch):
+    def push_git_snapshot(self, branch, interactive=True):
         commit_sha = self.take_snapshot()
         options = ['--force']
         if not logger.isEnabledFor(logging.DEBUG):
@@ -943,7 +951,8 @@ class TestPack(object):
         self._git(
             ['push'] + options +
             [self.remote,
-             '%s:refs/heads/%s' % (commit_sha, branch)])
+             '%s:refs/heads/%s' % (commit_sha, branch)],
+            interactive=interactive)
         return commit_sha
 
 
