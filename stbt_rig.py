@@ -542,7 +542,12 @@ def find_test_pack_root():
     containing .stbt.conf
     """
     root = os.getcwd()
-    while root != '/':
+
+    # This gets the toplevel in a cross-platform manner "/" on UNIX and
+    # (typically) "c:\" on Windows:
+    toplevel = os.path.abspath(os.sep)
+
+    while root != toplevel:
         if os.path.exists(os.path.join(root, '.stbt.conf')):
             return root
         root = os.path.split(root)[0]
