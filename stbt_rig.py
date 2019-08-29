@@ -542,7 +542,12 @@ def find_test_pack_root():
     containing .stbt.conf
     """
     root = os.getcwd()
-    while root != '/':
+
+    # This gets the toplevel in a cross-platform manner "/" on UNIX and
+    # (typically) "c:\" on Windows:
+    toplevel = os.path.abspath(os.sep)
+
+    while root != toplevel:
         if os.path.exists(os.path.join(root, '.stbt.conf')):
             return root
         root = os.path.split(root)[0]
@@ -594,7 +599,14 @@ def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
 
     while True:
         sys.stderr.write('Enter Access Token for portal %s: ' % portal_url)
-        token = sys.stdin.readline().strip()
+        sys.stderr.flush()
+        token = sys.stdin.readline()
+        if not token:
+            # EOF
+            sys.stderr.write("EOF!\n")
+            sys.stderr.flush()
+            break
+        token = token.strip()
         if token:
             if keyring is not None:
                 keyring.set_password(portal_url, "", token)
@@ -921,6 +933,7 @@ class TestPack(object):
             sys.stderr.write(
                 '\nTo avoid this warning add untracked files (with "git add") '
                 'or add them to .gitignore\n')
+            sys.stderr.flush()
 
         base_commit = self.get_sha(obj_type="commit")
 
@@ -1093,6 +1106,7 @@ try:
                     message += " during %s %s" % (
                         e.request.method, e.request.url)  # pylint:disable=no-member
                 sys.stderr.write(message + '\n')
+                sys.stderr.flush()
                 raise
             finally:
                 self.session.stbt_args.test_cases = None
@@ -1141,6 +1155,8 @@ try:
                         message += " during %s %s" % (
                             e.request.method, e.request.url)  # pylint:disable=no-member
                     die(message)
+        else:
+            die("Unauthorised")
 
         capmanager.resume_global_capture()
 
