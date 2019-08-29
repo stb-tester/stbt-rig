@@ -595,7 +595,13 @@ def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
     while True:
         sys.stderr.write('Enter Access Token for portal %s: ' % portal_url)
         sys.stderr.flush()
-        token = sys.stdin.readline().strip()
+        token = sys.stdin.readline()
+        if not token:
+            # EOF
+            sys.stderr.write("EOF!\n")
+            sys.stderr.flush()
+            break
+        token = token.strip()
         if token:
             if keyring is not None:
                 keyring.set_password(portal_url, "", token)
@@ -1144,6 +1150,8 @@ try:
                         message += " during %s %s" % (
                             e.request.method, e.request.url)  # pylint:disable=no-member
                     die(message)
+        else:
+            die("Unauthorised")
 
         capmanager.resume_global_capture()
 
