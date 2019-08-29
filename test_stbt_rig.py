@@ -1,17 +1,26 @@
+from __future__ import absolute_import, division, print_function
+
 import logging
 import os
 import re
 import socket
 import threading
 import time
-import subprocess
 from contextlib import contextmanager
+from sys import executable as python
 from textwrap import dedent
 
 import pytest
 import requests
 
 import stbt_rig
+from stbt_rig import to_native_str, to_unicode
+
+try:
+    # Needed for timeout argument to wait on Python 2.7
+    import subprocess32 as subprocess
+except ImportError:
+    import subprocess
 
 
 @pytest.fixture(scope="function", name="tmpdir")
@@ -68,13 +77,13 @@ def assert_status_unmodified():
 
 
 def cat(revision, filename):
-    return subprocess.check_output(
-        ['git', 'cat-file', 'blob', "%s:%s" % (revision, filename)])
+    return to_unicode(subprocess.check_output(
+        ['git', 'cat-file', 'blob', "%s:%s" % (revision, filename)]))
 
 
 def rev_parse(revision):
-    return subprocess.check_output(
-        ['git', 'rev-parse', '--verify', revision]).strip()
+    return to_unicode(subprocess.check_output(
+        ['git', 'rev-parse', '--verify', revision])).strip()
 
 
 def test_testpack_snapshot_contains_modifications(test_pack):
@@ -250,7 +259,7 @@ def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
     env = os.environ.copy()
     env['PYTHONPATH'] = os.path.dirname(os.path.abspath(__file__))
     subprocess.check_call([
-        'python', '-m', 'py.test', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
+        python, '-m', 'pytest', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
         '--portal-url=%s' % portal_mock.url, '--portal-auth-file=token',
         '--node-id=mynode', 'tests/test.py::test_my_tests'], env=env)
 
@@ -258,14 +267,14 @@ def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
     portal_mock.expect_run_tests(test_cases=['tests/test.py::test_my_tests'],
                                  node_id="mynode")
     subprocess.check_call([
-        'python', '-m', 'py.test', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
+        python, '-m', 'pytest', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
         '--portal-url=%s' % portal_mock.url, '--portal-auth-file=../token',
         '--node-id=mynode', 'test.py::test_my_tests'], env=env)
 
 
 def test_run_tests_jenkins(tmpdir, portal_mock):
     env = os.environ.copy()
-    env["JENKINS_HOME"] = tmpdir
+    env["JENKINS_HOME"] = to_native_str(tmpdir)
     env["STBT_AUTH_TOKEN"] = "this is my token"
     env["BUILD_ID"] = "1"
     env["BUILD_URL"] = "https://jenkins/job/test/1"
@@ -275,7 +284,7 @@ def test_run_tests_jenkins(tmpdir, portal_mock):
 
 def test_run_tests_bamboo(tmpdir, portal_mock):
     env = os.environ.copy()
-    env["bamboo_agentWorkingDirectory"] = tmpdir
+    env["bamboo_agentWorkingDirectory"] = to_native_str(tmpdir)
     env["bamboo_STBT_AUTH_PASSWORD"] = "this is my token"
     env["bamboo_shortJobName"] = "test"
     env["bamboo_buildPlanName"] = "test"
@@ -287,8 +296,8 @@ def run_tests_ci(portal_mock, env):
     portal_mock.expect_run_tests(test_cases=["tests/test.py::test_my_tests"],
                                  node_id="mynode")
     subprocess.check_call(
-        ["python", stbt_rig.__file__, "--node-id=mynode",
+        [python, stbt_rig.__file__, "--node-id=mynode",
          "--portal-url", portal_mock.url,
          "run", "tests/test.py::test_my_tests"],
-        env=env)
+        env=env, timeout=10)
     assert open("stbt-results.xml").read() == PortalMock.RESULTS_XML

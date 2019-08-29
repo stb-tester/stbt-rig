@@ -10,8 +10,10 @@ Copyright 2017-2019 Stb-tester.com Ltd. <support@stb-tester.com>
 Released under the MIT license.
 """
 
+from __future__ import (
+    absolute_import, division, print_function, unicode_literals)
+
 import argparse
-import ConfigParser
 import itertools
 import logging
 import os
@@ -28,6 +30,12 @@ from textwrap import dedent
 
 # Third-party libraries. Keep this list to a minimum to ease deployment.
 import requests
+
+try:
+    import configparser
+except ImportError:
+    # Python 2
+    import ConfigParser as configparser
 
 try:
     # Bash tab-completion, if python-argcomplete is installed
@@ -74,7 +82,7 @@ def resolve_args(args):
         try:
             _, config_parser = read_stbt_conf(find_test_pack_root())
             args.portal_url = config_parser.get('test_pack', 'portal_url')
-        except ConfigParser.Error as e:
+        except configparser.Error as e:
             die("--portal-url isn't specified on the command line and "
                 "test_pack.portal_url isn't specified in .stbt.conf: %s", e)
 
@@ -148,8 +156,8 @@ def _list_node_ids(**_kwargs):
     """
 
     return [f[17:-5]
-            for f in subprocess.check_output(
-                ["git", "ls-files", "config/test-farm/stb-tester-*.conf"])
+            for f in to_unicode(subprocess.check_output(
+                ["git", "ls-files", "config/test-farm/stb-tester-*.conf"]))
             .strip().split("\n")]
 
 
@@ -169,8 +177,8 @@ def _list_test_cases(prefix, **_kwargs):
     else:
         # List files:
         return [f + "::"
-                for f in subprocess.check_output(
-                    ["git", "ls-files", "tests/**.py"]).strip().split("\n")]
+                for f in to_unicode(subprocess.check_output(
+                    ["git", "ls-files", "tests/**.py"])).strip().split("\n")]
 
 
 ARGPARSE_EPILOGUE = dedent("""\
@@ -374,7 +382,7 @@ def argparser():
 
 
 def _exit(signo, _):
-    name = next(k for k, v in signal.__dict__.iteritems()
+    name = next(k for k, v in signal.__dict__.items()
                 if v == signo and "_" not in k)
     logger.warning("Received %s. Stopping job.", name)
     # Teardown is handled by TestJob.__exit__
@@ -477,8 +485,8 @@ def cmd_run_body(args, node, j):
 
     if args.mode in ["interactive", 'pytest']:
         for result in results:
-            print ""
-            print result.json["triage_url"]
+            print("")
+            print(result.json["triage_url"])
             result.print_logs()
     elif args.mode in ["bamboo", "jenkins"]:
         # Record results in XML format for the Jenkins JUnit plugin
@@ -491,8 +499,8 @@ def cmd_run_body(args, node, j):
         with open(args.csv, "w") as f:
             f.write(results_csv)
 
-    print "View these test results at: %s/app/#/results?filter=job:%s" % (
-        node.portal.url(), job.job_uid)
+    print("View these test results at: %s/app/#/results?filter=job:%s" % (
+        node.portal.url(), job.job_uid))
 
     if args.mode == "pytest":
         for result in results:
@@ -600,13 +608,13 @@ def read_stbt_conf(root):
     traverse them for the purposes of loading .stbt.conf.
     """
     root = os.path.abspath(root)
-    cp = ConfigParser.SafeConfigParser()
+    cp = configparser.SafeConfigParser()
     filename = os.path.join(root, '.stbt.conf')
     for _ in range(10):
         try:
             cp.read(filename)
             return os.path.relpath(filename, root), cp
-        except ConfigParser.MissingSectionHeaderError:
+        except configparser.MissingSectionHeaderError:
             if os.name == "posix":
                 # POSIX systems can support symlinks so something else must have
                 # gone wrong.
@@ -642,7 +650,7 @@ class Result(object):
         response = self._portal._get(
             '/api/v2/results%s/stbt.log' % self.json['result_id'])
         response.raise_for_status()
-        stream.write(response.content)
+        stream.write(response.text)
 
     def is_ok(self):
         return self.json['result'] == "pass"
@@ -715,13 +723,13 @@ class TestJob(object):
         r = self.portal._get(
             '/api/v2/results.xml', params={'filter': 'job:%s' % self.job_uid})
         r.raise_for_status()
-        return r.content
+        return r.text
 
     def list_results_csv(self):
         r = self.portal._get(
             '/api/v2/results.csv', params={'filter': 'job:%s' % self.job_uid})
         r.raise_for_status()
-        return r.content
+        return r.text
 
     def get_status(self, timeout=60):
         if self._json.get('status') == 'exited':
@@ -776,7 +784,7 @@ class Node(object):
     def save_screenshot(self, filename):
         r = self._get("screenshot.png")
         r.raise_for_status()
-        with open(filename, 'w') as f:
+        with open(filename, 'wb') as f:
             f.write(r.content)
 
     def _get(self, suffix="", **kwargs):
@@ -874,19 +882,19 @@ class TestPack(object):
         self.root = root
         self.remote = remote
 
-    def _git(self, cmd, capture_output=True, extra_env=None, **kwargs):  # pylint:disable=no-self-use
-        if capture_output:
-            call = subprocess.check_output
-        else:
-            call = subprocess.check_call
-
+    def _git(self, cmd, extra_env=None, **kwargs):  # pylint:disable=no-self-use
         env = kwargs.get('env', os.environ).copy()
         if extra_env:
             env.update(extra_env)
 
+        # On Windows environment variables must be bytes on 2.7 and unicode on
+        # 3.0+
+        env = {to_native_str(k): to_native_str(v) for k, v in env.items()}
+
         logger.debug('+git %s', " ".join(cmd))
 
-        return call(["git"] + cmd, env=env, **kwargs)
+        return to_unicode(
+            subprocess.check_output(["git"] + cmd, env=env, **kwargs))
 
     def get_sha(self, branch='HEAD', obj_type=None):
         if obj_type:
@@ -989,7 +997,7 @@ class RetrySession(object):
                     "Timed out making request %s %s", method, url,
                     exc_info=last_exc_info)
                 if last_exc_info[0] is not None:
-                    raise last_exc_info[0], last_exc_info[1], last_exc_info[2]  # pylint: disable=raising-bad-type
+                    raise_(last_exc_info[0], last_exc_info[1], last_exc_info[2])
                 else:
                     raise RetryTimeout()
 
@@ -1147,6 +1155,50 @@ def named_temporary_directory(suffix='', prefix='tmp', dir=None,
 def die(message, *args):
     logger.error(message, *args)
     sys.exit(1)
+
+
+def to_bytes(text):
+    if isinstance(text, bytes):
+        return text
+    else:
+        return text.encode("utf-8", errors="backslashreplace")
+
+
+def to_unicode(text):
+    if isinstance(text, bytes):
+        return text.decode("utf-8", errors="replace")
+    else:
+        return text
+
+
+def to_native_str(text):
+    if sys.version_info.major == 2:
+        return to_bytes(text)
+    else:
+        return to_unicode(text)
+
+
+# Python 2 & 3 compatible way of raising an exception with traceback.
+# Copied from python-future so that we don't have to add a dependency.
+if sys.version_info.major == 3:
+    def raise_(tp, value, tb):  # pylint:disable=unused-argument
+        """
+        A function that matches the Python 2.x ``raise`` statement. This
+        allows re-raising exceptions with the cls value and traceback on
+        Python 2 and 3.
+        """
+        exc = value
+        if exc.__traceback__ is not tb:
+            raise exc.with_traceback(tb)
+        raise exc
+else:
+    # `raise a, b, c` is a syntax error on Python 3 (even though we don't run
+    # this block with Python 3, Python still has to parse it). Hence `exec`.
+    exec(  # pylint:disable=exec-used
+        dedent('''\
+        def raise_(tp, value=None, tb=None):
+            raise tp, value, tb
+        '''))
 
 
 if __name__ == '__main__':

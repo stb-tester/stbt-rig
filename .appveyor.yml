@@ -1,8 +1,13 @@
+environment:
+  matrix:
+    - PYTHON: "C:\\Python27-x64"
+    - PYTHON: "C:\\Python36-x64"
+
 install:
-  - cmd: python.exe -m pip install keyring requests requests-mock pytest pylint==1.9.3 astroid==1.6.5 flask==1.0.2 werkzeug==0.14.1
+  - cmd: "%PYTHON%\\python.exe -m pip install -r requirements.txt"
 
 build: off
 
 test_script:
-  - cmd: pylint stbt_rig.py
-  - cmd: py.test -vv
+  - cmd: "%PYTHON%\\Scripts\\pylint.exe stbt_rig.py"
+  - cmd: "%PYTHON%\\Scripts\\pytest.exe -vv"

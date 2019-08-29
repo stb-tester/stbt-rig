@@ -1,11 +1,12 @@
 language: python
 python:
 - '2.7'
+- '3.6'
 
 install:
 - cat /etc/os-release
-- pip install keyring requests requests-mock pytest pylint==1.9.3 astroid==1.6.5 flask==1.0.2 werkzeug==0.14.1
+- pip install -r requirements.txt
 
 script:
 - pylint stbt_rig.py
-- py.test -vv
+- pytest -vv
