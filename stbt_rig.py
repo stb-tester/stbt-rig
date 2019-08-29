@@ -820,23 +820,15 @@ class TestJob(object):
             self._post('/stop', timeout=timeout, retry=True).raise_for_status()
 
     def await_completion(self, timeout=None):
-        if timeout is None:
-            timeout = 1e9  # 30 years is forever for our purposes
-        end_time = time.time() + timeout
         logger.debug("Awaiting completion of job %s", self.job_uid)
-        while True:
-            if time.time() > end_time:
-                raise TimeoutException(
-                    "Timeout waiting for job %s to complete" % self.job_uid)
-            if self.get_status(timeout=min(end_time - time.time(), 600)) != \
-                    TestJob.RUNNING:
-                logger.debug("Job complete %s", self.job_uid)
-                return
-            try:
-                self._get('/await_completion',
-                          timeout=min(end_time - time.time(), 600))
-            except requests.exceptions.Timeout:
-                pass
+        try:
+            response = self._get(
+                '/await_completion', retry=True, timeout=timeout)
+            response.raise_for_status()
+            logger.debug("Job complete %s", self.job_uid)
+        except requests.exceptions.Timeout:
+            raise TimeoutException(
+                "Timeout waiting for job %s to complete" % self.job_uid)
 
     def list_results(self):
         r = self.portal._get(
