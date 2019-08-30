@@ -95,36 +95,28 @@ def resolve_args(args):
 
 
 def main_with_args(args):
-    for portal_auth_token in iter_portal_auth_tokens(
-            args.portal_url, args.portal_auth_file, args.mode):
+    portal = Portal.from_args(args)
+    node = Node(portal, args.node_id)
 
-        portal = Portal(args.portal_url, portal_auth_token)
-        node = Node(portal, args.node_id)
+    try:
+        if args.command == "run":
+            return cmd_run(args, node)
+        elif args.command == "screenshot":
+            return cmd_screenshot(args, node)
+        elif args.command == "snapshot":
+            return cmd_snapshot(args, node)
+        assert False, "Unreachable: Unknown command %r" % args.command
+    except requests.exceptions.HTTPError as e:
+        message = "HTTP %i Error: %s" % (
+            e.response.status_code, e.response.text)
+        if hasattr(e, "request"):
+            message += " during %s %s" % (
+                e.request.method, e.request.url)  # pylint:disable=no-member
+        die(message)
+    except NodeBusyException as e:
+        die(str(e))
 
-        try:
-            if args.command == "run":
-                return cmd_run(args, node)
-            elif args.command == "screenshot":
-                return cmd_screenshot(args, node)
-            elif args.command == "snapshot":
-                return cmd_snapshot(args, node)
-            assert False, "Unreachable: Unknown command %r" % args.command
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 403:
-                # Unauthorised. Try again, but with a new password.
-                logger.error('Authentication failure with token "...%s"',
-                             portal_auth_token[-8:])
-            else:
-                message = "HTTP %i Error: %s" % (
-                    e.response.status_code, e.response.text)
-                if hasattr(e, "request"):
-                    message += " during %s %s" % (
-                        e.request.method, e.request.url)  # pylint:disable=no-member
-                die(message)
-        except NodeBusyException as e:
-            die(str(e))
-
-    # Authentication error and no further tokens
+    # Unreachable, but it makes pylint happy:
     return 1
 
 
@@ -588,65 +580,102 @@ def find_test_pack_root():
         """(starting at %s)""" % os.getcwd())
 
 
-def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
-    if portal_auth_file:
-        try:
-            with open(portal_auth_file) as f:
-                yield f.read().strip()
-        except IOError as e:
-            # NB. str(e) includes the filename
-            die("Failed to read portal auth file: %s" % e)
-        return
+class PortalAuthTokensAdapter(requests.adapters.HTTPAdapter):
+    """
+    Implements a requests adapter implementing (potentially) interactive auth
+    for the given portal.
+    """
+    def __init__(self, portal_url, portal_auth_file, mode):
+        super(PortalAuthTokensAdapter, self).__init__()
+        self.portal_url = portal_url
+        self.portal_auth_file = portal_auth_file
+        self.mode = mode
 
-    token = os.environ.get("STBT_AUTH_TOKEN")
+        self._it = self._iter_portal_auth_tokens()
+        self._auth_token = next(self._it)
 
-    if token:
-        yield token
-        return
-    elif mode == "jenkins":
-        die("No access token specified. Use the Jenkins Credentials "
-            "Binding plugin to provide the access token in the "
-            "environment variable STBT_AUTH_TOKEN")
+    @staticmethod
+    def from_args(args):
+        return PortalAuthTokensAdapter(
+            args.portal_url, args.portal_auth_file, args.mode)
 
-    if mode == "bamboo":
-        token = os.environ.get("bamboo_STBT_AUTH_PASSWORD")
+    def send(self, request, stream=False, timeout=None, verify=True, cert=None,
+             proxies=None):
+        while True:
+            request.headers['Authorization'] = "token " + self._auth_token
+            response = super(PortalAuthTokensAdapter, self).send(
+                request, stream, timeout, verify, cert, proxies)
+            if response.status_code == 403:
+                # Unauthorised. Try again, but with a new password.
+                logger.error('Authentication failure with token "...%s"',
+                             self._auth_token[-8:])
+                try:
+                    self._auth_token = next(self._it)
+                    continue
+                except StopIteration:
+                    self._auth_token = None
+            return response
+
+    def _iter_portal_auth_tokens(self):
+        if self.portal_auth_file:
+            try:
+                with open(self.portal_auth_file) as f:
+                    yield f.read().strip()
+            except IOError as e:
+                # NB. str(e) includes the filename
+                die("Failed to read portal auth file: %s" % e)
+            return
+
+        token = os.environ.get("STBT_AUTH_TOKEN")
+
         if token:
             yield token
-        else:
-            die("No access token specified. Provide the access token in the "
-                "variable bamboo.STBT_AUTH_PASSWORD")
-        return
+            return
+        elif self.mode == "jenkins":
+            die("No access token specified. Use the Jenkins Credentials "
+                "Binding plugin to provide the access token in the "
+                "environment variable STBT_AUTH_TOKEN")
 
-    assert mode in ["interactive", "pytest"], \
-        "Unreachable: Unknown mode %s" % mode
-
-    keyring = None
-    try:
-        import keyring
-        out = keyring.get_password(portal_url, "")
-        if out:
-            yield out
-    except ImportError:
-        pass
-
-    while True:
-        sys.stderr.write('Enter Access Token for portal %s: ' % portal_url)
-        sys.stderr.flush()
-        token = sys.stdin.readline()
-        if not token:
-            # EOF
-            sys.stderr.write("EOF!\n")
-            sys.stderr.flush()
-            break
-        token = token.strip()
-        if token:
-            if keyring is not None:
-                keyring.set_password(portal_url, "", token)
+        if self.mode == "bamboo":
+            token = os.environ.get("bamboo_STBT_AUTH_PASSWORD")
+            if token:
+                yield token
             else:
-                logger.warning(
-                    'Failed to save access token in system keyring. '
-                    'Install the Python "keyring" package.')
-            yield token
+                die("No access token specified. Provide the access token in "
+                    "the variable bamboo.STBT_AUTH_PASSWORD")
+            return
+
+        assert self.mode in ["interactive", "pytest"], \
+            "Unreachable: Unknown mode %s" % self.mode
+
+        keyring = None
+        try:
+            import keyring
+            out = keyring.get_password(self.portal_url, "")
+            if out:
+                yield out
+        except ImportError:
+            pass
+
+        while True:
+            sys.stderr.write(
+                'Enter Access Token for portal %s: ' % self.portal_url)
+            sys.stderr.flush()
+            token = sys.stdin.readline()
+            if not token:
+                # EOF
+                sys.stderr.write("EOF!\n")
+                sys.stderr.flush()
+                break
+            token = token.strip()
+            if token:
+                if keyring is not None:
+                    keyring.set_password(self.portal_url, "", token)
+                else:
+                    logger.warning(
+                        'Failed to save access token in system keyring. '
+                        'Install the Python "keyring" package.')
+                yield token
 
 
 def read_stbt_conf(root):
@@ -952,16 +981,21 @@ class Node(object):
 
 
 class Portal(object):
-    def __init__(self, url, auth_token, readonly=False):
+    def __init__(self, url, session, readonly=False):
         self._url = url
         self.readonly = readonly
-
-        session = requests.session()
-        session.headers.update({
-            "Authorization": "token %s" % auth_token,
-            "User-Agent": "stbt-rig"})
+        session.headers["User-Agent"] = "stbt-rig"
         self._session = RetrySession(
             timeout=1e9, session=session, logger=logger)
+
+    @staticmethod
+    def from_args(args):
+        session = requests.Session()
+        prefix = args.portal_url
+        if not prefix.endswith('/'):
+            prefix += '/'
+        session.mount(prefix, PortalAuthTokensAdapter.from_args(args))
+        return Portal(args.portal_url, session)
 
     def url(self, endpoint=""):
         if endpoint.startswith(self._url):
@@ -1352,28 +1386,19 @@ try:
         pluginmanager.unregister(name="python")
         capmanager = pluginmanager.getplugin('capturemanager')
         capmanager.suspend_global_capture(in_=True)
-        for portal_auth_token in iter_portal_auth_tokens(
-                args.portal_url, args.portal_auth_file, args.mode):
-            try:
-                portal = Portal(args.portal_url, portal_auth_token)
-                node = Node(portal, session.config.getvalue("node_id"))
 
-                j = cmd_run_prep(args, portal)
-                break
-            except requests.exceptions.HTTPError as e:
-                if e.response.status_code == 403:
-                    # Unauthorised. Try again, but with a new password.
-                    logger.error('Authentication failure with token "...%s"',
-                                 portal_auth_token[-8:])
-                else:
-                    message = "HTTP %i Error: %s" % (
-                        e.response.status_code, e.response.text)
-                    if hasattr(e, "request"):
-                        message += " during %s %s" % (
-                            e.request.method, e.request.url)  # pylint:disable=no-member
-                    die(message)
-        else:
-            die("Unauthorised")
+        try:
+            portal = Portal.from_args(args)
+            node = Node(portal, session.config.getvalue("node_id"))
+
+            j = cmd_run_prep(args, portal)
+        except requests.exceptions.HTTPError as e:
+            message = "HTTP %i Error: %s" % (
+                e.response.status_code, e.response.text)
+            if hasattr(e, "request"):
+                message += " during %s %s" % (
+                    e.request.method, e.request.url)  # pylint:disable=no-member
+            die(message)
 
         capmanager.resume_global_capture()
 
