@@ -175,7 +175,7 @@ class PortalMock(object):
                 response = flask.make_response("Unauthorized", 401,
                     {'WWW-Authenticate':'Basic realm="Login Required"'})
                 return response
-            if (flask.request.headers['Authorization'] !=
+            if (flask.request.headers.get('Authorization') !=
                     "token this is my token"):
                 return ("Forbidden", 403)
             else:
