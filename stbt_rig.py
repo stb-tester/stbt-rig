@@ -1102,7 +1102,7 @@ class RetrySession(object):
 
     def request(self, method, url, timeout=None, retry=None, **kwargs):
         last_exc_info = (None, None, None)
-        if timeout:
+        if timeout is not None:
             end_time = self._time.time() + timeout
         else:
             end_time = self._end_time
