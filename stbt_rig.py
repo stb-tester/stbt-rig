@@ -1126,8 +1126,15 @@ class RetrySession(object):
                     raise RetryTimeout()
 
             # We have a global timeout: we don't want any single request to
-            # take longer than 1/2 of the time remaining to allow for retries
-            kwargs.setdefault('timeout', max((end_time - now) / 2, 1))
+            # take longer than 1/2 of the time remaining to allow for retries.
+            #
+            # We also place a limit of 60s.  Requests to the portal should
+            # time-out in less time than this anyway.  The risk of a longer
+            # timeout is that the connection gets dropped silently by a some
+            # middlebox and we wait for ages when we're never going to get a
+            # response.
+            timeout = min(60, max((end_time - now) / 2, 1))
+            kwargs.setdefault('timeout', timeout)
             response = None
             try:
                 response = self._session.request(method, url, **kwargs)
