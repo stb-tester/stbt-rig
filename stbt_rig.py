@@ -14,9 +14,12 @@ from __future__ import (
     absolute_import, division, print_function, unicode_literals)
 
 import argparse
+import errno
+import fnmatch
 import itertools
 import logging
 import os
+import platform
 import re
 import shutil
 import signal
@@ -326,6 +329,18 @@ RUN_ARGS = [
         sys.argv and are recorded alongside the test-results. "--tag" can be
         specified more than once."""),
 
+    Arg(("--artifacts"), action="append", dest="artifacts", default=[],
+        metavar="GLOB", help="""Select artifacts to be downloaded.  This is a
+        filename glob.  Set to `*` for all artifacts.  This argument can be
+        specified multiple times."""),
+
+    Arg(("--artifacts-dest"), default=None, metavar="PATH", help="""Artifacts
+        will be downloaded to here.  You can include the placeholders
+        {result_id}, {filename} and {basename} here to be filled in
+        automatically by stbt_rig.  Defaults to
+        {result_id}/artifacts/{filename}.  Directories will be created as
+        required."""),
+
     Arg("test_cases", nargs='+', metavar="TESTCASE",
         help="""One or more tests to run. Test names have the form
         FILENAME::FUNCTION_NAME where FILENAME is given relative to the root of
@@ -502,6 +517,10 @@ def cmd_run_body(args, node, j):
         with open(args.csv, "w") as f:
             f.write(results_csv)
 
+    if args.artifacts:
+        for result in results:
+            result.download_artifacts(args.artifacts, args.artifacts_dest)
+
     print("View these test results at: %s/app/#/results?filter=job:%s" % (
         node.portal.url(), job.job_uid))
 
@@ -659,13 +678,81 @@ class Result(object):
         self._portal = portal
         self.json = result_json
 
+    @property
+    def result_id(self):
+        return self.json['result_id']
+
     def print_logs(self, stream=None):
         if stream is None:
             stream = sys.stdout
         response = self._portal._get(
-            '/api/v2/results%s/stbt.log' % self.json['result_id'])
+            '/api/v2/results%s/stbt.log' % self.result_id)
         response.raise_for_status()
         stream.write(response.text)
+
+    def list_artifacts(self):
+        if 'artifacts' not in self.json:
+            r = self._portal._get("/api/v2/results%s" % self.result_id)
+            r.raise_for_status()
+            self.json = r.json()
+        return self.json["artifacts"]
+
+    def download_artifacts(self, patterns=("*",), out_pattern=None):
+        if out_pattern is None:
+            if platform.system() == "Windows":
+                out_pattern = "{result_id}\\artifacts\\{filename}"
+            else:
+                out_pattern = "{result_id}/artifacts/{filename}"
+        for filename, info in self.list_artifacts().items():
+            for p in patterns:
+                if fnmatch.fnmatch(filename, p):
+                    break
+            else:
+                continue
+
+            native_filename = filename.replace('/', os.sep)
+
+            format_kwargs = {
+                "basename": os.path.basename(native_filename),
+                "filename": native_filename,
+            }
+
+            for k, v in self.json.items():
+                if isinstance(v, unicode):
+                    # Strip the leading '/' from result_id so we don't write
+                    # files to root
+                    v = v.strip('/')
+
+                    # Support Windows path separator:
+                    v = v.replace('/', os.sep)
+
+                    # Windows can't support : in filenames, so replace the : in
+                    # the ISO8601 date:
+                    if platform.system() == "Windows":
+                        v = v.replace(":", "-")
+
+                    format_kwargs[k] = v
+
+            outname = out_pattern.format(**format_kwargs)
+
+            try:
+                # This way we can avoid downloading the same file twice if we've
+                # already downloaded it.
+                if os.stat(outname).st_size == info["size"]:
+                    continue
+            except OSError:
+                pass
+            self.download_artifact(filename, outname)
+
+    def download_artifact(self, artifact, outname):
+        resp = self._portal._get(
+            "/api/v2/results%s/artifacts/%s" % (self.result_id, artifact),
+            stream=True)
+        resp.raise_for_status()
+        mkdir_p(os.path.dirname(outname))
+        with sponge(outname) as f:
+            for x in resp.iter_content(chunk_size=None):
+                f.write(x)
 
     def is_ok(self):
         return self.json['result'] == "pass"
@@ -1177,6 +1264,35 @@ def named_temporary_directory(suffix='', prefix='tmp', dir=None,
         shutil.rmtree(dirname, ignore_errors=ignore_errors)
 
 
+@contextmanager
+def sponge(filename):
+    # pylint: disable=bad-continuation
+    with tempfile.NamedTemporaryFile(
+            dir=os.path.dirname(filename), prefix=os.path.basename(filename),
+            suffix='~', delete=False) as f:
+        try:
+            yield f
+            f.close()
+            os.rename(f.name, filename)
+        except:
+            os.remove(f.name)
+            raise
+
+
+def mkdir_p(d):
+    """Python 3.2 has an optional argument to os.makedirs called exist_ok.  To
+    support older versions of python we can't use this and need to catch
+    exceptions"""
+    try:
+        os.makedirs(d)
+    except OSError as e:
+        if e.errno == errno.EEXIST and os.path.isdir(d) \
+                and os.access(d, os.R_OK | os.W_OK):
+            return
+        else:
+            raise
+
+
 def die(message, *args):
     logger.error(message, *args)
     sys.exit(1)
@@ -1216,6 +1332,8 @@ if sys.version_info.major == 3:
         if exc.__traceback__ is not tb:
             raise exc.with_traceback(tb)
         raise exc
+
+    unicode = str
 else:
     # `raise a, b, c` is a syntax error on Python 3 (even though we don't run
     # this block with Python 3, Python still has to parse it). Hence `exec`.
