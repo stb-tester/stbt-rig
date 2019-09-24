@@ -1283,8 +1283,23 @@ def named_temporary_directory(suffix='', prefix='tmp', dir=None,
         shutil.rmtree(dirname, ignore_errors=ignore_errors)
 
 
+try:
+    replace = os.replace
+except AttributeError:
+    if platform.system() == "Windows":
+        replace = None
+    else:
+        replace = os.rename
+
+
 @contextmanager
 def sponge(filename):
+    if not replace:
+        # Can't be atomic on Windows with Python <v3.3.  Oh well.
+        with open(filename, "wb") as f:
+            yield f
+        return
+
     # pylint: disable=bad-continuation
     with tempfile.NamedTemporaryFile(
             dir=os.path.dirname(filename), prefix=os.path.basename(filename),
@@ -1292,7 +1307,7 @@ def sponge(filename):
         try:
             yield f
             f.close()
-            os.rename(f.name, filename)
+            replace(f.name, filename)
         except:
             os.remove(f.name)
             raise
