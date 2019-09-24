@@ -16,6 +16,7 @@ from __future__ import (
 import argparse
 import errno
 import fnmatch
+import hashlib
 import itertools
 import logging
 import os
@@ -734,17 +735,13 @@ class Result(object):
                     format_kwargs[k] = v
 
             outname = out_pattern.format(**format_kwargs)
+            self.download_artifact(filename, outname, info)
 
-            try:
-                # This way we can avoid downloading the same file twice if we've
-                # already downloaded it.
-                if os.stat(outname).st_size == info["size"]:
-                    continue
-            except OSError:
-                pass
-            self.download_artifact(filename, outname)
-
-    def download_artifact(self, artifact, outname):
+    def download_artifact(self, artifact, outname, info=None):
+        # This way we can avoid downloading the same file twice if we've already
+        # downloaded it:
+        if info and _file_is_same(outname, info['size'], info['md5']):
+            return
         resp = self._portal._get(
             "/api/v2/results%s/artifacts/%s" % (self.result_id, artifact),
             stream=True)
@@ -771,6 +768,22 @@ class Result(object):
             raise TestError(self.json['traceback'])
         elif self.json['result'] == 'fail':
             raise TestFailure(self.json['traceback'])
+
+
+def _file_is_same(filename, size, md5sum):
+    try:
+        if os.stat(filename).st_size != size:
+            return False
+        with open(filename, "rb") as f:
+            h = hashlib.md5()
+            while True:
+                x = f.read(1024 * 1024)
+                if not x:
+                    break
+                h.update(x)
+            return h.hexdigest() == md5sum
+    except OSError:
+        return False
 
 
 class TestJob(object):

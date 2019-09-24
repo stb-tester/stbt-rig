@@ -136,9 +136,11 @@ class PortalMock(object):
             "artifacts": {
                 "combined.log": {
                     "size": len(b'Downloaded \'combined.log\''),
+                    "md5": "a31802f438fa89d98d77796cadc5be14",
                 },
                 "screenshot.png": {
                     "size": len(b'Downloaded \'screenshot.png\''),
+                    'md5': "4a2ae485dcf5cf9f391cb5ac65128385",
                 },
             }
         }]
@@ -302,6 +304,15 @@ def test_run_tests_download_artifacts(test_pack, tmpdir, portal_mock):
     assert glob.glob(path + "*") == [path + "screenshot.png"]
     with open(path + "screenshot.png", 'rb') as f:
         assert re.match(b"Downloaded u?'screenshot.png'", f.read())
+
+    portal_mock.expect_run_tests(test_cases=['tests/test.py::test_my_tests'],
+                                 node_id="mynode")
+
+    assert 0 == stbt_rig.main([
+        'stbt_rig.py', '--node-id=mynode', '--portal-url=%s' % portal_mock.url,
+        '--portal-auth-file=token', 'run',
+        '--artifacts=*.png', '--artifacts-dest=%s/{filename}' % path,
+        'tests/test.py::test_my_tests'])
 
 
 def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
