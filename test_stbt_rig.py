@@ -1,7 +1,9 @@
 from __future__ import absolute_import, division, print_function
 
+import glob
 import logging
 import os
+import platform
 import re
 import socket
 import threading
@@ -126,6 +128,23 @@ class PortalMock(object):
         self.thread = None
         self.socket = None
 
+        RESULTS = [{
+            "result": "pass",
+            "triage_url": ("https://example.stb-tester.com/app/#/result/"
+                           "/mynode/6Pfq/167/2018-10-10T13:13:20"),
+            "result_id": "/mynode/6Pfq/167/2018-10-10T13:13:20",
+            "artifacts": {
+                "combined.log": {
+                    "size": len(b'Downloaded \'combined.log\''),
+                    "md5": "a31802f438fa89d98d77796cadc5be14",
+                },
+                "screenshot.png": {
+                    "size": len(b'Downloaded \'screenshot.png\''),
+                    'md5': "4a2ae485dcf5cf9f391cb5ac65128385",
+                },
+            }
+        }]
+
         @self.app.before_request
         def check_auth():
             if flask.request.path.startswith('/unauthorised.git'):
@@ -154,20 +173,29 @@ class PortalMock(object):
         @self.app.route('/api/v2/results')
         def get_results():
             assert flask.request.args['filter'] == 'job:/mynode/6Pfq/167'
-            return flask.jsonify([{
-                "result": "pass",
-                "triage_url": ("https://example.stb-tester.com/app/#/result/"
-                               "/mynode/6Pfq/167/2018-10-10_13.13.20"),
-                "result_id": "/mynode/6Pfq/167/2018-10-10_13.13.20",
-              }])
+            out = [dict(x) for x in RESULTS]
+            for x in out:
+                del x['artifacts']
+            return flask.jsonify(out)
 
         @self.app.route('/api/v2/results.xml')
         def get_results_xml():
             assert flask.request.args['filter'] == 'job:/mynode/6Pfq/167'
             return PortalMock.RESULTS_XML
 
+        @self.app.route('/api/v2/results/<path:result_id>')
+        def get_results_details(result_id):
+            return flask.jsonify([
+                x for x in RESULTS if x['result_id'] == '/' + result_id][0])
+
         @self.app.route(
-            "/api/v2/results/mynode/6Pfq/167/2018-10-10_13.13.20/stbt.log")
+                '/api/v2/results/mynode/6Pfq/167/2018-10-10T13:13:20/artifacts'
+                '/<path:path>')
+        def get_artifact(path):
+            return "Downloaded %r" % path, 200
+
+        @self.app.route(
+            "/api/v2/results/mynode/6Pfq/167/2018-10-10T13:13:20/stbt.log")
         def get_stbt_log():
             return "The log output\n"
 
@@ -242,7 +270,7 @@ def test_run_tests_interactive(capsys, test_pack, tmpdir, portal_mock):
         'stbt_rig.py', '--node-id=mynode', '--portal-url=%s' % portal_mock.url,
         '--portal-auth-file=token', 'run', 'tests/test.py::test_my_tests'])
     expected_stdout = dedent("""\
-        https://example.stb-tester.com/app/#/result//mynode/6Pfq/167/2018-10-10_13.13.20
+        https://example.stb-tester.com/app/#/result//mynode/6Pfq/167/2018-10-10T13:13:20
         The log output
         View these test results at: %s/app/#/results?filter=job:/mynode/6Pfq/167
         """) % portal_mock.url
@@ -254,6 +282,37 @@ def test_run_tests_interactive(capsys, test_pack, tmpdir, portal_mock):
     assert 0 == stbt_rig.main([
         'stbt_rig.py', '--node-id=mynode', '--portal-url=%s' % portal_mock.url,
         '--portal-auth-file=../token', 'run', 'test.py::test_my_tests'])
+
+
+def test_run_tests_download_artifacts(test_pack, tmpdir, portal_mock):
+    with open('token', 'w') as f:
+        f.write("this is my token")
+    portal_mock.expect_run_tests(test_cases=['tests/test.py::test_my_tests'],
+                                 node_id="mynode")
+
+    assert 0 == stbt_rig.main([
+        'stbt_rig.py', '--node-id=mynode', '--portal-url=%s' % portal_mock.url,
+        '--portal-auth-file=token', 'run',
+        '--artifacts=*.png',
+        'tests/test.py::test_my_tests'])
+
+    if platform.system() == "Windows":
+        path = "mynode\\6Pfq\\167\\2018-10-10T13-13-20\\artifacts\\"
+    else:
+        path = "mynode/6Pfq/167/2018-10-10T13:13:20/artifacts/"
+
+    assert glob.glob(path + "*") == [path + "screenshot.png"]
+    with open(path + "screenshot.png", 'rb') as f:
+        assert re.match(b"Downloaded u?'screenshot.png'", f.read())
+
+    portal_mock.expect_run_tests(test_cases=['tests/test.py::test_my_tests'],
+                                 node_id="mynode")
+
+    assert 0 == stbt_rig.main([
+        'stbt_rig.py', '--node-id=mynode', '--portal-url=%s' % portal_mock.url,
+        '--portal-auth-file=token', 'run',
+        '--artifacts=*.png', '--artifacts-dest=%s/{filename}' % path,
+        'tests/test.py::test_my_tests'])
 
 
 def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
