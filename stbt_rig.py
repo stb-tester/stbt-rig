@@ -811,28 +811,24 @@ class TestJob(object):
     def __exit__(self, _1, _2, _3):
         self.stop()
 
-    def stop(self):
+    def stop(self, timeout=600):
         if self.get_status() != TestJob.EXITED:
-            self._post('/stop', retry=True).raise_for_status()
+            # Sometimes jobs take a long time to stop (uploading artifacts);
+            # in that case we get 202 Accepted after 55s to avoid other HTTP
+            # server or client timeouts.
+            # The "<job_id>/stop" endpoint is idempotent so it's safe to retry.
+            self._post('/stop', timeout=timeout, retry=True).raise_for_status()
 
     def await_completion(self, timeout=None):
-        if timeout is None:
-            timeout = 1e9  # 30 years is forever for our purposes
-        end_time = time.time() + timeout
         logger.debug("Awaiting completion of job %s", self.job_uid)
-        while True:
-            if time.time() > end_time:
-                raise TimeoutException(
-                    "Timeout waiting for job %s to complete" % self.job_uid)
-            if self.get_status(timeout=min(end_time - time.time(), 600)) != \
-                    TestJob.RUNNING:
-                logger.debug("Job complete %s", self.job_uid)
-                return
-            try:
-                self._get('/await_completion',
-                          timeout=min(end_time - time.time(), 600))
-            except requests.exceptions.Timeout:
-                pass
+        try:
+            response = self._get(
+                '/await_completion', retry=True, timeout=timeout)
+            response.raise_for_status()
+            logger.debug("Job complete %s", self.job_uid)
+        except requests.exceptions.Timeout:
+            raise TimeoutException(
+                "Timeout waiting for job %s to complete" % self.job_uid)
 
     def list_results(self):
         r = self.portal._get(
@@ -1106,7 +1102,7 @@ class RetrySession(object):
 
     def request(self, method, url, timeout=None, retry=None, **kwargs):
         last_exc_info = (None, None, None)
-        if timeout:
+        if timeout is not None:
             end_time = self._time.time() + timeout
         else:
             end_time = self._end_time
@@ -1130,17 +1126,31 @@ class RetrySession(object):
                     raise RetryTimeout()
 
             # We have a global timeout: we don't want any single request to
-            # take longer than 1/2 of the time remaining to allow for retries
-            kwargs.setdefault('timeout', max((end_time - now) / 2, 1))
+            # take longer than 1/2 of the time remaining to allow for retries.
+            #
+            # We also place a limit of 60s.  Requests to the portal should
+            # time-out in less time than this anyway.  The risk of a longer
+            # timeout is that the connection gets dropped silently by a some
+            # middlebox and we wait for ages when we're never going to get a
+            # response.
+            timeout = min(60, max((end_time - now) / 2, 1))
+            kwargs.setdefault('timeout', timeout)
             response = None
             try:
                 response = self._session.request(method, url, **kwargs)
-                # Success or 4xx client error: don't retry:
-                if response.status_code < 500:
+                if response.status_code == 202:
+                    # We return 202 "Accepted" from our endpoints indicating
+                    # that we've started the requested operation, but haven't
+                    # finished yet.  Typically this is used for long-poll.  It's
+                    # the equivalent to a syscall returning EAGAIN.
+                    pass
+                elif response.status_code < 500:
                     # Avoid traceback circular references:
                     del last_exc_info
+                    # Success or 4xx client error: don't retry
                     return response
-                response.raise_for_status()
+                else:
+                    response.raise_for_status()
             except requests.RequestException as e:
                 # Exponential backoff up to 30s
                 interval = max(

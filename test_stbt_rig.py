@@ -4,6 +4,7 @@ import glob
 import logging
 import os
 import platform
+import random
 import re
 import socket
 import threading
@@ -169,6 +170,10 @@ class PortalMock(object):
         @self.app.route('/api/v2/jobs/mynode/6Pfq/167')
         def get_job():
             return flask.jsonify({'status': 'exited'})
+
+        @self.app.route('/api/v2/jobs/mynode/6Pfq/167/await_completion')
+        def await_completion():
+            return "{}", random.choice([200, 202, 202, 202])
 
         @self.app.route('/api/v2/results')
         def get_results():
