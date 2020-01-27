@@ -1194,20 +1194,22 @@ try:
         def collect(self):
             with open(self.fspath.strpath) as f:
                 # We implement our own parsing to avoid import stbt ImportErrors
-                for line in f:
+                for n, line in enumerate(f):
                     m = re.match(r'^def\s+(test_[a-zA-Z0-9_]*)', line)
                     if m:
-                        yield StbtRemoteTest(self, self.name, m.group(1))
+                        yield StbtRemoteTest(self, self.name, m.group(1), n + 1)
 
 
     class StbtRemoteTest(pytest.Item):
-        def __init__(self, parent, filename, testname):
+        def __init__(self, parent, filename, testname, line_number):
             super(StbtRemoteTest, self).__init__(testname, parent)
             self._filename = filename
             self._testname = testname
+            self._line_number = line_number
 
         def __repr__(self):
-            return "StbtRemoteTest(%r, %r)" % (self._filename, self._testname)
+            return "StbtRemoteTest(%r, %r, %r)" % (
+                self._filename, self._testname, self._line_number)
 
         def runtest(self):
             j = self.session.stbt_run_prep
@@ -1227,6 +1229,8 @@ try:
             finally:
                 self.session.stbt_args.test_cases = None
 
+        def reportinfo(self):
+            return self.fspath, self._line_number, ""
 
     class Args(object):
         """Pretends to be the result of calling `argparser` `parse_args` so we
