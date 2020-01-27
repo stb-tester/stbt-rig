@@ -1249,7 +1249,11 @@ try:
         session.stbt_args = args
         resolve_args(session.stbt_args)
 
-        capmanager = session.config.pluginmanager.getplugin('capturemanager')
+        pluginmanager = session.config.pluginmanager
+        if not session.config.option.collectonly:
+            pluginmanager.unregister(name="python")
+
+        capmanager = pluginmanager.getplugin('capturemanager')
         capmanager.suspend_global_capture(in_=True)
         for portal_auth_token in iter_portal_auth_tokens(
                 args.portal_url, args.portal_auth_file, args.mode):
