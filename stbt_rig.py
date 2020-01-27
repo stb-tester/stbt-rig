@@ -1192,7 +1192,7 @@ try:
 
     class StbtCollector(pytest.File):
         def collect(self):
-            with open(self.name) as f:
+            with open(self.fspath.strpath) as f:
                 # We implement our own parsing to avoid import stbt ImportErrors
                 for line in f:
                     m = re.match(r'^def\s+(test_[a-zA-Z0-9_]*)', line)
