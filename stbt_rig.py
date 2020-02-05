@@ -545,13 +545,14 @@ def cmd_screenshot(args, node):
 def cmd_snapshot(args, node):
     branch_name = _get_snapshot_branch_name(node.portal)
     TestPack(remote=args.git_remote).push_git_snapshot(branch_name)
+    node.portal.notify_push()
 
 
 def _get_snapshot_branch_name(portal):
     response = portal._get("/api/v2/user")
     response.raise_for_status()
     username = response.json()["login"]
-    return "%s/snapshot" % username
+    return "refs/snapshots/%s" % username
 
 
 class NotInTestPack(Exception):
@@ -969,6 +970,9 @@ class Portal(object):
             job.await_completion(timeout=timeout)
             return job
 
+    def notify_push(self):
+        self._post("/github/post-receive").raise_for_status()
+
     def _get(self, endpoint, timeout=60, **kwargs):
         return self._session.get(self.url(endpoint), timeout=timeout, **kwargs)
 
@@ -1062,11 +1066,11 @@ class TestPack(object):
         options = ['--force']
         if not logger.isEnabledFor(logging.DEBUG):
             options.append('--quiet')
-        logger.info("Pushing git snapshot to %s/%s", self.remote, branch)
+        logger.info("Pushing git snapshot to %s:%s", self.remote, branch)
         self._git(
             ['push'] + options +
             [self.remote,
-             '%s:refs/heads/%s' % (commit_sha, branch)],
+             '%s:%s' % (commit_sha, branch)],
             interactive=interactive)
         return commit_sha
 
