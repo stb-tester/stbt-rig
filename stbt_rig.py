@@ -1066,7 +1066,8 @@ class TestPack(object):
         options = ['--force']
         if not logger.isEnabledFor(logging.DEBUG):
             options.append('--quiet')
-        logger.info("Pushing git snapshot to %s:%s", self.remote, branch)
+        logger.info("Pushing git snapshot %s to %s:%s",
+                    commit_sha[:7], self.remote, branch)
         self._git(
             ['push'] + options +
             [self.remote,
