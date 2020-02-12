@@ -342,6 +342,10 @@ RUN_ARGS = [
         {result_id}/artifacts/{filename}.  Directories will be created as
         required."""),
 
+    Arg("--junit-xml", action="append", dest="junit_xml", default=[],
+        help="""Save JUnit style XML file with results to this path.  This is
+        enabled by default in jenkins or bamboo mode.""", cmdline_only=True),
+
     Arg("test_cases", nargs='+', metavar="TESTCASE",
         help="""One or more tests to run. Test names have the form
         FILENAME::FUNCTION_NAME where FILENAME is given relative to the root of
@@ -509,9 +513,14 @@ def cmd_run_body(args, node, j):
             result.print_logs()
     elif args.mode in ["bamboo", "jenkins"]:
         # Record results in XML format for the Jenkins JUnit plugin
+        if not args.junit_xml:
+            args.junit_xml = ["stbt-results.xml"]
+
+    if args.junit_xml:
         results_xml = job.list_results_xml()
-        with open("stbt-results.xml", "w") as f:
-            f.write(results_xml)
+        for filename in args.junit_xml:
+            with open(filename, "w") as f:
+                f.write(results_xml)
 
     if args.csv:
         results_csv = job.list_results_csv()

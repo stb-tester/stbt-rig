@@ -320,6 +320,20 @@ def test_run_tests_download_artifacts(test_pack, tmpdir, portal_mock):
         'tests/test.py::test_my_tests'])
 
 
+def test_run_tests_junit_xml(test_pack, tmpdir, portal_mock):
+    with open('token', 'w') as f:
+        f.write("this is my token")
+    portal_mock.expect_run_tests(test_cases=['tests/test.py::test_my_tests'],
+                                 node_id="mynode")
+
+    assert 0 == stbt_rig.main([
+        'stbt_rig.py', '--node-id=mynode', '--portal-url=%s' % portal_mock.url,
+        '--portal-auth-file=token', 'run',
+        '--junit-xml=results.xml',
+        'tests/test.py::test_my_tests'])
+    assert open("results.xml").read() == PortalMock.RESULTS_XML
+
+
 def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
     with open('token', 'w') as f:
         f.write("this is my token")
