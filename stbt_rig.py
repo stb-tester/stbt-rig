@@ -103,6 +103,8 @@ def main_with_args(args):
     try:
         if args.command == "run":
             return cmd_run(args, node)
+        elif args.command == "download":
+            return cmd_download(args, portal)
         elif args.command == "screenshot":
             return cmd_screenshot(args, node)
         elif args.command == "snapshot":
@@ -311,6 +313,30 @@ def argparser():
     for arg in RUN_ARGS:
         arg.add(run_parser)
 
+    download_parser = subcommands.add_parser(
+        "download", help="Download test-result artifacts",
+        description="""Download artifacts (log files, screenshots, etc) from
+        the specified test-result.""")
+    download_parser.add_argument(
+        "--artifacts", action="append", dest="artifacts", default=[],
+        metavar="GLOB", help="""Select artifacts to be downloaded.  This is a
+        filename glob.  Defaults to `*` (all artifacts).  This argument can be
+        specified multiple times.""")
+    download_parser.add_argument(
+        "--artifacts-dest", metavar="PATH",
+        default=os.path.join("{result_id}", "artifacts", "{filename}"),
+        help="""Artifacts will be downloaded to here. You can include the
+        placeholders {result_id}, {filename} and {basename} here to be filled
+        in automatically by stbt_rig. Defaults to "%(default)s". Directories
+        will be created as required.""")
+    download_parser.add_argument(
+        "result_id", help='''Identifier that refers to a test result, as
+        returned from Stb-tester's REST API for running a test
+        (/api/v2/run_tests) or for searching for previous test results
+        (/api/v2/results) -- see <https://stb-tester.com/manual/rest-api-v2>.
+        It looks like "/stb-tester-abcdef123456/0000/123/2020-01-01_13.00.00"
+        ''')
+
     screenshot_parser = subcommands.add_parser(
         "screenshot", help="Save a screenshot to disk",
         description="""Take a screenshot from the specified Stb-tester node
@@ -472,6 +498,11 @@ def cmd_run_body(args, node, j):
             return 0
         else:
             return 1
+
+
+def cmd_download(args, portal):
+    result = portal.get_result(args.result_id)
+    result.download_artifacts(args.artifacts or ["*"], args.artifacts_dest)
 
 
 def cmd_screenshot(args, node):
@@ -981,6 +1012,11 @@ class Portal(object):
 
     def notify_push(self):
         self._post("/github/post-receive").raise_for_status()
+
+    def get_result(self, result_id):
+        r = self._get("/api/v2/results/" + result_id)
+        r.raise_for_status()
+        return Result(self, r.json())
 
     def _get(self, endpoint, timeout=60, **kwargs):
         return self._session.get(self.url(endpoint), timeout=timeout, **kwargs)
