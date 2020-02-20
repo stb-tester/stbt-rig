@@ -264,12 +264,12 @@ RUN_ARGS = [
         filename glob.  Set to `*` for all artifacts.  This argument can be
         specified multiple times."""),
 
-    Arg(("--artifacts-dest"), default=None, metavar="PATH", help="""Artifacts
-        will be downloaded to here.  You can include the placeholders
-        {result_id}, {filename} and {basename} here to be filled in
-        automatically by stbt_rig.  Defaults to
-        {result_id}/artifacts/{filename}.  Directories will be created as
-        required."""),
+    Arg(("--artifacts-dest"), metavar="PATH",
+        default=os.path.join("{result_id}", "artifacts", "{filename}"),
+        help="""Artifacts will be downloaded to here. You can include the
+        placeholders {result_id}, {filename} and {basename} here to be filled
+        in automatically by stbt_rig. Defaults to "%(default)s". Directories
+        will be created as required."""),
 
     Arg("--junit-xml", action="append", dest="junit_xml", default=[],
         help="""Save JUnit style XML file with results to this path.  This is
@@ -687,12 +687,7 @@ class Result(object):
             self.json = r.json()
         return self.json["artifacts"]
 
-    def download_artifacts(self, patterns=("*",), out_pattern=None):
-        if out_pattern is None:
-            if platform.system() == "Windows":
-                out_pattern = "{result_id}\\artifacts\\{filename}"
-            else:
-                out_pattern = "{result_id}/artifacts/{filename}"
+    def download_artifacts(self, patterns, out_pattern):
         for filename, info in self.list_artifacts().items():
             for p in patterns:
                 if fnmatch.fnmatch(filename, p):
