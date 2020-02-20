@@ -756,12 +756,12 @@ class Result(object):
         # This way we can avoid downloading the same file twice if we've already
         # downloaded it:
         if info and _file_is_same(outname, info['size'], info['md5']):
-            logger.debug("Not Downloading %s/artifacts/%s to %s - file is "
-                         "unmodified", self.result_id, artifact, outname)
+            logger.info("Not Downloading %s/artifacts/%s to %s - file is "
+                        "unmodified", self.result_id, artifact, outname)
             return
 
-        logger.debug("Downloading %s/artifacts/%s to %s",
-                     self.result_id, artifact, outname)
+        logger.info("Downloading %s/artifacts/%s to %s",
+                    self.result_id, artifact, outname)
         resp = self._portal._get(
             "/api/v2/results%s/artifacts/%s" % (self.result_id, artifact),
             stream=True)
