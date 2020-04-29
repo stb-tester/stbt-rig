@@ -545,13 +545,14 @@ def cmd_screenshot(args, node):
 def cmd_snapshot(args, node):
     branch_name = _get_snapshot_branch_name(node.portal)
     TestPack(remote=args.git_remote).push_git_snapshot(branch_name)
+    node.portal.notify_push()
 
 
 def _get_snapshot_branch_name(portal):
     response = portal._get("/api/v2/user")
     response.raise_for_status()
     username = response.json()["login"]
-    return "%s/snapshot" % username
+    return "refs/snapshots/%s" % username
 
 
 class NotInTestPack(Exception):
@@ -969,6 +970,9 @@ class Portal(object):
             job.await_completion(timeout=timeout)
             return job
 
+    def notify_push(self):
+        self._post("/github/post-receive").raise_for_status()
+
     def _get(self, endpoint, timeout=60, **kwargs):
         return self._session.get(self.url(endpoint), timeout=timeout, **kwargs)
 
@@ -1050,25 +1054,58 @@ class TestPack(object):
                 ['write-tree'],
                 extra_env={'GIT_INDEX_FILE': tmp_index}).strip()
 
-        if self.get_sha(obj_type="tree") == write_tree:
-            return base_commit
+        head = self._git(["rev-parse", "--symbolic-full-name", "HEAD"]).strip()
+        remoteref = self._git(
+            ["for-each-ref",
+             "--format=%(push:remoteref)\n%(upstream:remoteref)\n",
+             head]).split('\n')
+        if remoteref and remoteref[0]:
+            # push:remoteref set if the repo is configured to push to a
+            # different place from which it fetches
+            remoteref = remoteref[0]
+        elif len(remoteref) > 1 and remoteref[1]:
+            # upstream:remoteref will be set otherwise, assuming we've actually
+            # got a remote tracking branch.
+            remoteref = remoteref[1]
         else:
-            return self._git(
-                ['commit-tree', write_tree, '-p', base_commit, '-m',
-                 "snapshot"]).strip()
+            remoteref = ""
+
+        no_workingdir_changes = (self.get_sha(obj_type="tree") == write_tree)
+        if no_workingdir_changes:
+            # No changes, we still want a new commit so we can inform the portal
+            # which branch we're working on.  We copy over the author date and
+            # committer date so we'll get the same SHA every time.  This will
+            # cut down on push time and object pollution.
+            ad, cd = self._git(
+                ["show", base_commit, "--no-patch",
+                 "--format=%ad\n%cd"]).split('\n')[:2]
+            extra_env = {"GIT_AUTHOR_DATE": ad, "GIT_COMMITTER_DATE": cd}
+        else:
+            extra_env = {}
+
+        commit_sha = self._git(
+            ['commit-tree', write_tree, '-p', base_commit, '-m',
+             "snapshot\n\nremoteref: %s" % remoteref],
+            extra_env=extra_env).strip()
+
+        if no_workingdir_changes:
+            return commit_sha, base_commit
+        else:
+            return commit_sha, commit_sha
 
     def push_git_snapshot(self, branch, interactive=True):
-        commit_sha = self.take_snapshot()
+        commit_sha, run_sha = self.take_snapshot()
         options = ['--force']
         if not logger.isEnabledFor(logging.DEBUG):
             options.append('--quiet')
-        logger.info("Pushing git snapshot to %s/%s", self.remote, branch)
+        logger.info("Pushing git snapshot %s to %s:%s",
+                    commit_sha[:7], self.remote, branch)
         self._git(
             ['push'] + options +
             [self.remote,
-             '%s:refs/heads/%s' % (commit_sha, branch)],
+             '%s:%s' % (commit_sha, branch)],
             interactive=interactive)
-        return commit_sha
+        return run_sha
 
 
 class RetrySession(object):

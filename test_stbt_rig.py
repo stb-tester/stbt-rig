@@ -1,12 +1,10 @@
 from __future__ import absolute_import, division, print_function
 
 import glob
-import logging
 import os
 import platform
 import random
 import re
-import socket
 import threading
 import time
 from contextlib import contextmanager
@@ -31,7 +29,8 @@ def fixture_tmpdir():
     with stbt_rig.named_temporary_directory(ignore_errors=True) as d:
         origdir = os.path.abspath(os.curdir)
         try:
-            os.chdir(d)
+            os.mkdir("%s/test-pack" % d)
+            os.chdir("%s/test-pack" % d)
             yield d
         finally:
             os.chdir(origdir)
@@ -39,13 +38,13 @@ def fixture_tmpdir():
 
 @pytest.fixture(scope="function", name="test_pack")
 def fixture_test_pack(tmpdir):  # pylint: disable=unused-argument
-    subprocess.check_call(['git', 'init'])
+    os.mkdir("../upstream")
+    subprocess.check_call(['git', 'init', '--bare'], cwd="../upstream")
+
+    subprocess.check_call(['git', 'clone', '../upstream', '.'])
     subprocess.check_call([
         'git', 'config', 'user.email', 'stbt-rig@stb-tester.com'])
     subprocess.check_call(['git', 'config', 'user.name', 'stbt-rig tests'])
-
-    # Make git push a noop
-    subprocess.check_call(['git', 'remote', 'add', 'origin', '.'])
 
     with open(".stbt.conf", "w") as f:
         f.write(dedent("""\
@@ -62,13 +61,24 @@ def fixture_test_pack(tmpdir):  # pylint: disable=unused-argument
     subprocess.check_call(
         ['git', 'add', '.stbt.conf', 'moo', '.gitignore', 'tests/test.py'])
     subprocess.check_call(['git', 'commit', '-m', 'Test'])
+    subprocess.check_call(['git', 'push', '-u', 'origin', 'master:mybranch'])
 
     return stbt_rig.TestPack()
 
 
 def test_testpack_snapshot_no_change_if_no_commits(test_pack):
     with assert_status_unmodified():
-        assert rev_parse("HEAD") == test_pack.take_snapshot()
+        commit_sha, run_sha = test_pack.take_snapshot()
+        assert rev_parse("HEAD") == run_sha
+        assert tree_sha(commit_sha) == tree_sha(run_sha)
+        assert commit_msg(commit_sha) == (
+            "snapshot\n\nremoteref: refs/heads/mybranch")
+
+        # Check that the SHA is deterministic:
+        time.sleep(1)
+        new_commit_sha, new_run_sha = test_pack.take_snapshot()
+        assert new_commit_sha == commit_sha
+        assert new_run_sha == run_sha
 
 
 @contextmanager
@@ -89,15 +99,26 @@ def rev_parse(revision):
         ['git', 'rev-parse', '--verify', revision])).strip()
 
 
+def tree_sha(revision):
+    return to_unicode(subprocess.check_output(
+        ['git', 'show', '--format=%T', '--no-patch', revision])).strip()
+
+
+def commit_msg(revision):
+    return to_unicode(subprocess.check_output(
+        ['git', 'show', '--format=%s\n\n%b', '--no-patch', revision])).strip()
+
+
 def test_testpack_snapshot_contains_modifications(test_pack):
     with open("moo", "w") as f:
         f.write("Goodbye!\n")
 
     with assert_status_unmodified():
-        ss = test_pack.take_snapshot()
-        assert ss != rev_parse("HEAD")
-        assert rev_parse("%s~1" % ss) == rev_parse("HEAD")
-        assert cat(ss, 'moo') == "Goodbye!\n"
+        cs, rs = test_pack.take_snapshot()
+        assert cs == rs
+        assert rs != rev_parse("HEAD")
+        assert rev_parse("%s~1" % rs) == rev_parse("HEAD")
+        assert cat(rs, 'moo') == "Goodbye!\n"
         assert cat("HEAD", 'moo') == "Hello!\n"
 
 
@@ -108,9 +129,10 @@ def test_testpack_snapshot_with_untracked_files(test_pack, capsys):
 
     with assert_status_unmodified():
         orig_sha = rev_parse("HEAD")
-        ss = test_pack.take_snapshot()
+        cs, rs = test_pack.take_snapshot()
         # Untracked files aren't included in the snapshot:
-        assert orig_sha == ss
+        assert orig_sha == rs
+        assert tree_sha(cs) == tree_sha(orig_sha)
 
     assert capsys.readouterr() == ("", dedent("""\
         stbt-rig: Warning: Ignoring untracked files:
