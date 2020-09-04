@@ -839,7 +839,8 @@ class TestJob(object):
 
     def list_results_xml(self):
         r = self.portal._get(
-            '/api/v2/results.xml', params={'filter': 'job:%s' % self.job_uid})
+            '/api/v2/results.xml', params={'filter': 'job:%s' % self.job_uid,
+                                           'include_tz': 'true'})
         r.raise_for_status()
         return r.text
 
