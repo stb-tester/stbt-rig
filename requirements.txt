@@ -5,8 +5,9 @@ requests
 
 # Dependencies of the tests
 requests-mock
-pylint==1.9.3
-astroid==1.6.5
+pylint==1.8.3
+astroid==1.6.0
 flask==1.1.1
+isort==4.3.4
 subprocess32==3.5.4 ; python_version=='2.7'
 werkzeug==0.15.5
