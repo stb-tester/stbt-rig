@@ -1223,7 +1223,13 @@ try:
 
     def pytest_collect_file(path, parent):
         if path.ext == ".py":
-            return StbtCollector(path, parent)
+            if hasattr(StbtCollector, "from_parent"):
+                # pytest >v5.4
+                return StbtCollector.from_parent(parent=parent, fspath=path)  # pylint:disable=no-member
+            else:
+                # Backwards compat
+                # https://docs.pytest.org/en/stable/deprecations.html#node-construction-changed-to-node-from-parent
+                return StbtCollector(path, parent)
         else:
             return None
 
@@ -1235,7 +1241,17 @@ try:
                 for n, line in enumerate(f):
                     m = re.match(r'^def\s+(test_[a-zA-Z0-9_]*)', line)
                     if m:
-                        yield StbtRemoteTest(self, self.name, m.group(1), n + 1)
+                        if hasattr(StbtRemoteTest, "from_parent"):
+                            # pytest >v5.4
+                            srt = StbtRemoteTest.from_parent(  # pylint:disable=no-member
+                                parent=self, filename=self.name,
+                                testname=m.group(1), line_number=n + 1)
+                        else:
+                            # Backwards compat
+                            # https://docs.pytest.org/en/stable/deprecations.html#node-construction-changed-to-node-from-parent
+                            srt = StbtRemoteTest(
+                                self, self.name, m.group(1), n + 1)
+                        yield srt
 
 
     class StbtRemoteTest(pytest.Item):
