@@ -208,6 +208,7 @@ class PortalMock(object):
         @self.app.route('/api/v2/results.xml')
         def get_results_xml():
             assert flask.request.args['filter'] == 'job:/mynode/6Pfq/167'
+            assert flask.request.args['include_tz'] == 'true'
             return PortalMock.RESULTS_XML
 
         @self.app.route('/api/v2/results/<path:result_id>')
@@ -276,7 +277,7 @@ class PortalMock(object):
     RESULTS_XML = (
         '<testsuite disabled="0" errors="0" failures="0" '
         'name="test" skipped="0" tests="1" time="3.270815" '
-        'timestamp="2019-06-12T15:26:35">'
+        'timestamp="2019-06-12T15:26:35+00:00">'
         '<testcase classname="tests/test.py" name="test_my_tests" '
         'time="3.270815"/>'
         '</testsuite>')

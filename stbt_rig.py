@@ -6,7 +6,7 @@
 For more details, and to get the latest version of this script, see
 <https://github.com/stb-tester/stbt-rig>.
 
-Copyright 2017-2019 Stb-tester.com Ltd. <support@stb-tester.com>
+Copyright 2017-2020 Stb-tester.com Ltd. <support@stb-tester.com>
 Released under the MIT license.
 """
 
@@ -839,7 +839,8 @@ class TestJob(object):
 
     def list_results_xml(self):
         r = self.portal._get(
-            '/api/v2/results.xml', params={'filter': 'job:%s' % self.job_uid})
+            '/api/v2/results.xml', params={'filter': 'job:%s' % self.job_uid,
+                                           'include_tz': 'true'})
         r.raise_for_status()
         return r.text
 
@@ -1222,22 +1223,40 @@ try:
 
     def pytest_collect_file(path, parent):
         if path.ext == ".py":
-            return StbtCollector(path, parent)
+            if hasattr(StbtCollector, "from_parent"):
+                # pytest >v5.4
+                return StbtCollector.from_parent(parent=parent, fspath=path)  # pylint:disable=no-member
+            else:
+                # Backwards compat
+                # https://docs.pytest.org/en/stable/deprecations.html#node-construction-changed-to-node-from-parent
+                return StbtCollector(path, parent)
         else:
             return None
 
 
     class StbtCollector(pytest.File):
+        # pylint: disable=abstract-method
         def collect(self):
             with open(self.fspath.strpath) as f:
                 # We implement our own parsing to avoid import stbt ImportErrors
                 for n, line in enumerate(f):
                     m = re.match(r'^def\s+(test_[a-zA-Z0-9_]*)', line)
                     if m:
-                        yield StbtRemoteTest(self, self.name, m.group(1), n + 1)
+                        if hasattr(StbtRemoteTest, "from_parent"):
+                            # pytest >v5.4
+                            srt = StbtRemoteTest.from_parent(  # pylint:disable=no-member
+                                parent=self, filename=self.name,
+                                testname=m.group(1), line_number=n + 1)
+                        else:
+                            # Backwards compat
+                            # https://docs.pytest.org/en/stable/deprecations.html#node-construction-changed-to-node-from-parent
+                            srt = StbtRemoteTest(
+                                self, self.name, m.group(1), n + 1)
+                        yield srt
 
 
     class StbtRemoteTest(pytest.Item):
+        # pylint: disable=abstract-method
         def __init__(self, parent, filename, testname, line_number):
             super(StbtRemoteTest, self).__init__(testname, parent)
             self._filename = filename
