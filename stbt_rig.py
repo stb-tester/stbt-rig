@@ -1235,6 +1235,7 @@ try:
 
 
     class StbtCollector(pytest.File):
+        # pylint: disable=abstract-method
         def collect(self):
             with open(self.fspath.strpath) as f:
                 # We implement our own parsing to avoid import stbt ImportErrors
@@ -1255,6 +1256,7 @@ try:
 
 
     class StbtRemoteTest(pytest.Item):
+        # pylint: disable=abstract-method
         def __init__(self, parent, filename, testname, line_number):
             super(StbtRemoteTest, self).__init__(testname, parent)
             self._filename = filename
