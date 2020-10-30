@@ -789,16 +789,17 @@ def _get_local_timezone():
         return str(tzlocal.get_localzone())
     except ImportError:
         pass
-    try:
-        # On Unix systems /etc/localtime is a symlink. On Ubuntu it points to
-        # "/usr/share/zoneinfo/Europe/London". On MacOS it points to
-        # "/var/db/timezone/zoneinfo/Europe/London".
-        zoneinfo_filename = os.readlink("/etc/localtime")
-        m = re.match(r"^.*/zoneinfo/(.*)", zoneinfo_filename)
-        if m:
-            return m.group(1)
-    except OSError:
-        pass
+    if platform.system() != "Windows":
+        try:
+            # On Unix systems /etc/localtime is a symlink. On Ubuntu it points
+            # to "/usr/share/zoneinfo/Europe/London". On MacOS it points to
+            # "/var/db/timezone/zoneinfo/Europe/London".
+            zoneinfo_filename = os.readlink("/etc/localtime")  # pylint:disable=no-member
+            m = re.match(r"^.*/zoneinfo/(.*)", zoneinfo_filename)
+            if m:
+                return m.group(1)
+        except OSError:
+            pass
     return None
 
 
