@@ -697,8 +697,14 @@ class Result(object):
     def print_logs(self, stream=None):
         if stream is None:
             stream = sys.stdout
+        tz = _get_local_timezone()
+        if tz:
+            params = {"tz": tz}
+        else:
+            params = {}
         response = self._portal._get(
-            '/api/v2/results%s/stbt.log' % self.result_id)
+            '/api/v2/results%s/stbt.log' % self.result_id,
+            params=params)
         response.raise_for_status()
         stream.write(response.text)
 
@@ -784,6 +790,26 @@ class Result(object):
             raise TestError(self.json['traceback'])
         elif self.json['result'] == 'fail':
             raise TestFailure(self.json['traceback'])
+
+
+def _get_local_timezone():
+    try:
+        import tzlocal
+        return str(tzlocal.get_localzone())
+    except ImportError:
+        pass
+    if platform.system() != "Windows":
+        try:
+            # On Unix systems /etc/localtime is a symlink. On Ubuntu it points
+            # to "/usr/share/zoneinfo/Europe/London". On MacOS it points to
+            # "/var/db/timezone/zoneinfo/Europe/London".
+            zoneinfo_filename = os.readlink("/etc/localtime")  # pylint:disable=no-member
+            m = re.match(r"^.*/zoneinfo/(.*)", zoneinfo_filename)
+            if m:
+                return m.group(1)
+        except OSError:
+            pass
+    return None
 
 
 def _file_is_same(filename, size, md5sum):

@@ -2,6 +2,7 @@
 keyring
 pytest
 requests
+tzlocal
 
 # Dependencies of the tests
 requests-mock
