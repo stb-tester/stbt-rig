@@ -52,10 +52,10 @@ except ImportError:
 logger = logging.getLogger("stbt_rig")
 
 
-def main(argv):
+def main(argv=None):
     parser = argparser()
     autocomplete(parser)
-    args = parser.parse_args(argv[1:])
+    args = parser.parse_args((argv or sys.argv)[1:])
 
     signal.signal(signal.SIGINT, _exit)
     signal.signal(signal.SIGTERM, _exit)
@@ -1488,4 +1488,4 @@ else:
 
 
 if __name__ == '__main__':
-    sys.exit(main(sys.argv))
+    sys.exit(main())
