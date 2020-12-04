@@ -1345,9 +1345,10 @@ try:
         resolve_args(session.stbt_args)
 
         pluginmanager = session.config.pluginmanager
-        if not session.config.option.collectonly:
-            pluginmanager.unregister(name="python")
+        if session.config.option.collectonly:
+            return
 
+        pluginmanager.unregister(name="python")
         capmanager = pluginmanager.getplugin('capturemanager')
         capmanager.suspend_global_capture(in_=True)
         for portal_auth_token in iter_portal_auth_tokens(
@@ -1377,6 +1378,7 @@ try:
 
         session.stbt_node = node
         session.stbt_run_prep = j
+
 except ImportError:
     # Pytest integration is optional
     pass
