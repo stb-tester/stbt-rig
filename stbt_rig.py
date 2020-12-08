@@ -270,7 +270,9 @@ ARGS = [
     Arg("--node-id", metavar="stb-tester-abcdef123456",
         help="""Which Stb-tester node to execute the COMMAND on. The node ID is
         labelled on the physical Stb-tester node, and it is also shown in the
-        Stb-tester Portal.""", completer=_list_node_ids),
+        Stb-tester Portal. Defaults to $STBT_NODE_ID.""",
+        default=os.environ.get("STBT_NODE_ID"),
+        completer=_list_node_ids),
 
     Arg("--git-remote", metavar="NAME", default="origin",
         help="""Which git remote to push to. Defaults to "origin" (this is the
