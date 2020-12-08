@@ -108,6 +108,10 @@ def main_with_args(args):
     portal = Portal.from_args(args)
     node = Node(portal, args.node_id)
 
+    # Do this before importing requests, we will be installing requests in here:
+    if args.command == "setup":
+        return cmd_setup(args, node)
+
     try:
         if args.command == "run":
             return cmd_run(args, node)
@@ -334,6 +338,11 @@ def argparser():
         Note that the "run" command automatically does this when in interactive
         mode.""")
 
+    subcommands.add_parser(
+        "setup", help="Setup your venv for development",
+        description="""Creates a Python venv and installs dependencies needed
+        for test-script development.""")
+
     return parser
 
 
@@ -491,6 +500,58 @@ def cmd_snapshot(args, node):
     branch_name = _get_snapshot_branch_name(node.portal)
     TestPack(remote=args.git_remote).push_git_snapshot(branch_name)
     node.portal.notify_push()
+
+
+def cmd_setup(args, node):
+    this_stbt_rig = os.path.abspath(sys.argv[0])
+    root = find_test_pack_root()
+
+    if os.environ.get("STBT_RIG_SECOND_STAGE") != "1":
+        _, config_parser = read_stbt_conf(root)
+        stbt_version = int(config_parser.get("test_pack", "stbt_version"))
+        python_version = config_parser.get("test_pack", "python_version")
+
+        # Create venv
+        subprocess.check_call(
+            ["python%s" % python_version, '-m', 'venv', '.venv'], cwd=root)
+
+        # Install dependencies
+        pip_deps = [
+            "stb-tester>=%s,<%s" % (stbt_version, stbt_version + 1),
+            "pylint==1.8.3",
+            "astroid==1.6.0",
+            "pytest>=4.6,<4.7",
+            "isort==4.3.4",
+            "keyring",
+            "requests"]
+
+        subprocess.check_call(
+            ["%s/.venv/bin/pip" % root, 'install', "--upgrade", 'pip'],
+            cwd=root)
+        subprocess.check_call(
+            ["%s/.venv/bin/pip" % root, 'install'] + pip_deps, cwd=root)
+
+        os.environ["STBT_RIG_SECOND_STAGE"] = "1"
+
+        # We re-exec ourselves into the venv now that we've installed all our
+        # dependencies
+        os.execv("%s/.venv/bin/python" % root,
+                 ["%s/.venv/bin/python" % root, this_stbt_rig] + sys.argv[1:])
+    else:
+        # Install ourselves as a python module in the venv:
+        venv_site_packages = sys.path[-1]
+        this_stbt_rig_rel = os.path.relpath(this_stbt_rig, venv_site_packages)
+        pkg = os.path.join(venv_site_packages, "stbt_rig.py")
+        if this_stbt_rig_rel != "stbt_rig.py":
+            if platform.system() == "Windows":
+                shutil.copyfile(this_stbt_rig, pkg)
+            else:
+                try:
+                    os.unlink(pkg)
+                except OSError:
+                    # File doesn't exist
+                    pass
+                os.symlink(this_stbt_rig_rel, pkg)  # pylint: disable=no-member
 
 
 def _get_snapshot_branch_name(portal):
