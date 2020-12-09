@@ -199,7 +199,8 @@ ARGPARSE_EPILOGUE = dedent("""\
 
       You can also save the access token to a file (don't commit the
       file to the git repository!) and give the filename with
-      --portal-auth-file.
+      --portal-auth-file or put the access token in ths $STBT_AUTH_TOKEN
+      environment variable.
 
       In Jenkins you can use the Credentials Binding plugin to pass the
       access token in an environment variable. See the Jenkins
@@ -216,8 +217,6 @@ ARGPARSE_EPILOGUE = dedent("""\
       We automatically detect if we are running inside a Jenkins job.
       If so, we enable the following behaviours:
 
-      * Read the access token from $STBT_AUTH_TOKEN environment
-        variable.
       * Record various Jenkins parameters as "tags" in the Stb-tester
         results:
         - jenkins/BUILD_ID
@@ -271,7 +270,9 @@ ARGS = [
     Arg("--node-id", metavar="stb-tester-abcdef123456",
         help="""Which Stb-tester node to execute the COMMAND on. The node ID is
         labelled on the physical Stb-tester node, and it is also shown in the
-        Stb-tester Portal.""", completer=_list_node_ids),
+        Stb-tester Portal. Defaults to $STBT_NODE_ID.""",
+        default=os.environ.get("STBT_NODE_ID"),
+        completer=_list_node_ids),
 
     Arg("--git-remote", metavar="NAME", default="origin",
         help="""Which git remote to push to. Defaults to "origin" (this is the
@@ -597,15 +598,15 @@ def iter_portal_auth_tokens(portal_url, portal_auth_file, mode):
             die("Failed to read portal auth file: %s" % e)
         return
 
-    if mode == "jenkins":
-        token = os.environ.get("STBT_AUTH_TOKEN")
-        if token:
-            yield token
-        else:
-            die("No access token specified. Use the Jenkins Credentials "
-                "Binding plugin to provide the access token in the "
-                "environment variable STBT_AUTH_TOKEN")
+    token = os.environ.get("STBT_AUTH_TOKEN")
+
+    if token:
+        yield token
         return
+    elif mode == "jenkins":
+        die("No access token specified. Use the Jenkins Credentials "
+            "Binding plugin to provide the access token in the "
+            "environment variable STBT_AUTH_TOKEN")
 
     if mode == "bamboo":
         token = os.environ.get("bamboo_STBT_AUTH_PASSWORD")
