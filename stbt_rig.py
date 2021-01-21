@@ -553,9 +553,63 @@ def cmd_setup(args, node):
                     pass
                 os.symlink(this_stbt_rig_rel, pkg)  # pylint: disable=no-member
 
+        os.chdir(root)
+
         # This will prompt for the auth token and validate connectivity:
         portal = Portal.from_args(args)
         portal._get("/api/v2/user")
+
+        # Setup .env to include our node-id so we don't need to specify it every
+        # time
+        if node.node_id:
+            node_id = node.node_id
+        else:
+            r = portal._get("/api/_private/workgroup")
+            r.raise_for_status()
+            nodes = r.json()
+            assert nodes
+            if len(nodes) == 1:
+                node_id = nodes[0]["id"]
+            else:
+                sys.stderr.write("These nodes are attached to the portal:\n")
+                for n in nodes:
+                    sys.stderr.write("  %s\n" % n["id"])
+                node_id = ask("Which node do you want to use by default? ")
+
+        sys.stderr.write(
+            "Selected %s as the default node to use.  Edit .env to change\n" %
+            node_id)
+
+        updates = {}
+        updates[b"STBT_NODE_ID"] = node_id.encode("utf-8")
+        _update_env(updates)
+
+
+def _update_env(updates):
+    """Used for updating vscode style .env files which have the format:
+
+    KEY=VALUE
+    KEY2=VALUE2
+    """
+    if not updates:
+        return
+    try:
+        with open(".env", "rb") as f:
+            env = f.read()
+    except IOError:
+        env = b""
+
+    with sponge(".env") as f:
+        for l in env.split(b"\n"):
+            try:
+                k, v = l.split(b'=', 1)
+                f.write(b"%s=%s\n" % (k, updates[k]))
+                del updates[k]
+            except (ValueError, KeyError):
+                f.write(l + b"\n")
+                continue
+        for k, v in updates.items():
+            f.write(b"%s=%s\n" % (k, v))
 
 
 def _get_snapshot_branch_name(portal):
