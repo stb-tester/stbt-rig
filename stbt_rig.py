@@ -553,6 +553,10 @@ def cmd_setup(args, node):
                     pass
                 os.symlink(this_stbt_rig_rel, pkg)  # pylint: disable=no-member
 
+        # This will prompt for the auth token and validate connectivity:
+        portal = Portal.from_args(args)
+        portal._get("/api/v2/user")
+
 
 def _get_snapshot_branch_name(portal):
     response = portal._get("/api/v2/user")
