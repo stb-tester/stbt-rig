@@ -338,10 +338,13 @@ def argparser():
         Note that the "run" command automatically does this when in interactive
         mode.""")
 
-    subcommands.add_parser(
+    setup_parser = subcommands.add_parser(
         "setup", help="Setup your venv for development",
         description="""Creates a Python venv and installs dependencies needed
         for test-script development.""")
+    setup_parser.add_argument(
+        "--vscode", action="store_true",
+        help="Update VSCode settings.json with recommended settings")
 
     return parser
 
@@ -583,6 +586,60 @@ def cmd_setup(args, node):
         updates = {}
         updates[b"STBT_NODE_ID"] = node_id.encode("utf-8")
         _update_env(updates)
+
+        if args.vscode:
+            _update_vscode_config()
+
+
+def _update_vscode_config():
+    import json
+
+    VS_CODE_CONFIG = {
+        "python.linting.pylintEnabled": True,
+        "python.linting.enabled": True,
+        "python.linting.pylintArgs": ["--load-plugins=stbt.pylint_plugin"],
+        "python.testing.pytestPath": "${workspaceFolder}/.venv/bin/pytest",
+        "python.testing.pytestArgs": [
+            "-p", "stbt_rig",
+            "-p", "no:python",
+            "--override-ini=python_files=*.py",
+            "--override-ini=python_functions=test_*",
+            "--tb=no", "--capture=no",
+            "tests"
+        ],
+        "runOnSave.commands": [
+            {
+                "match": ".*\\.py$",
+                "command":
+                "${workspaceFolder}/.venv/bin/python -m stbt_rig -v snapshot",
+                "runIn": "terminal",
+                "runningStatusMessage": "Running stbt_rig snapshot...",
+                "finishStatusMessage": "Snapshot complete"
+            }
+        ],
+        "python.testing.unittestEnabled": False,
+        "python.testing.nosetestsEnabled": False,
+        "python.testing.pytestEnabled": True,
+        "python.linting.mypyEnabled": False,
+        "python.pythonPath": "${workspaceFolder}/.venv/bin/python",
+        "python.envFile": "${workspaceFolder}/.env"
+    }
+    try:
+        with open(".vscode/settings.json") as f:
+            cfg = json.load(f)
+    except OSError:
+        cfg = {}
+
+    modified = False
+    for k, v in VS_CODE_CONFIG.items():
+        if cfg.get(k) != v:
+            cfg[k] = v
+            modified = True
+
+    if modified:
+        mkdir_p(".vscode")
+        with sponge(".vscode/settings.json") as f:
+            f.write(json.dumps(cfg, indent=4, sort_keys=True).encode("utf-8"))
 
 
 def _update_env(updates):
