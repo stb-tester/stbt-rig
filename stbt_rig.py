@@ -32,9 +32,6 @@ from collections import namedtuple
 from contextlib import contextmanager
 from textwrap import dedent
 
-# Third-party libraries. Keep this list to a minimum to ease deployment.
-import requests
-
 try:
     import configparser
     ConfigParser = configparser.ConfigParser
@@ -48,6 +45,17 @@ try:
     from argcomplete import autocomplete
 except ImportError:
     def autocomplete(*_args):
+        pass
+
+try:
+    from requests.adapters import HTTPAdapter
+    from requests.exceptions import HTTPError
+except ImportError:
+    # Hack: Work around requests not being installed so stbt_rig.py setup still
+    # works
+    class HTTPAdapter(object):
+        pass
+    class HTTPError(Exception):
         pass
 
 
@@ -108,7 +116,7 @@ def main_with_args(args):
         elif args.command == "snapshot":
             return cmd_snapshot(args, node)
         assert False, "Unreachable: Unknown command %r" % args.command
-    except requests.exceptions.HTTPError as e:
+    except HTTPError as e:
         message = "HTTP %i Error: %s" % (
             e.response.status_code, e.response.text)
         if hasattr(e, "request"):
@@ -515,7 +523,7 @@ def find_test_pack_root():
         """(starting at %s)""" % os.getcwd())
 
 
-class PortalAuthTokensAdapter(requests.adapters.HTTPAdapter):
+class PortalAuthTokensAdapter(HTTPAdapter):
     """
     Implements a requests adapter implementing (potentially) interactive auth
     for the given portal.
@@ -829,6 +837,7 @@ class TestJob(object):
             self._post('/stop', timeout=timeout, retry=True).raise_for_status()
 
     def await_completion(self, timeout=None):
+        import requests
         logger.debug("Awaiting completion of job %s", self.job_uid)
         try:
             response = self._get(
@@ -933,6 +942,7 @@ class Portal(object):
 
     @staticmethod
     def from_args(args):
+        import requests
         session = requests.Session()
         prefix = args.portal_url
         if not prefix.endswith('/'):
@@ -1130,6 +1140,7 @@ class RetrySession(object):
     def __init__(self, timeout, session=None, interval=1,
                  logger=logging.getLogger('retry_session'),  # pylint: disable=redefined-outer-name
                  _time=None):
+        import requests
         if session is None:
             session = requests.Session()
         if _time is None:
@@ -1152,6 +1163,8 @@ class RetrySession(object):
         return self.request('get', url, params=params, **kwargs)
 
     def request(self, method, url, timeout=None, retry=None, **kwargs):
+        import requests
+
         last_exc_info = (None, None, None)
         if timeout is not None:
             end_time = self._time.time() + timeout
@@ -1174,7 +1187,7 @@ class RetrySession(object):
                 if last_exc_info[0] is not None:
                     raise_(last_exc_info[0], last_exc_info[1], last_exc_info[2])
                 else:
-                    raise RetryTimeout()
+                    raise requests.exceptions.Timeout()
 
             # We have a global timeout: we don't want any single request to
             # take longer than 1/2 of the time remaining to allow for retries.
@@ -1214,10 +1227,6 @@ class RetrySession(object):
                     self._logger.info('Got response %r', e.response.text)
                 last_exc_info = sys.exc_info()
                 self._time.sleep(interval)
-
-
-class RetryTimeout(requests.exceptions.Timeout):
-    pass
 
 
 PYTEST = False
@@ -1302,7 +1311,7 @@ else:
                 self.session.stbt_args.test_cases = ["%s::%s" % (
                     self._filename, self._testname)]
                 cmd_run_body(self.session.stbt_args, self.session.stbt_node, j)
-            except requests.exceptions.HTTPError as e:
+            except HTTPError as e:
                 message = "HTTP %i Error: %s" % (
                     e.response.status_code, e.response.text)
                 if hasattr(e, "request"):
@@ -1393,7 +1402,7 @@ else:
             node = Node(portal, session.config.getvalue("node_id"))
 
             j = cmd_run_prep(args, portal)
-        except requests.exceptions.HTTPError as e:
+        except HTTPError as e:
             message = "HTTP %i Error: %s" % (
                 e.response.status_code, e.response.text)
             if hasattr(e, "request"):
