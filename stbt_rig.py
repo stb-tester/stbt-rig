@@ -4,7 +4,7 @@
 """Command-line tool for interacting with the Stb-tester Portal's REST API.
 
 For more details, and to get the latest version of this script, see
-<https://github.com/stb-tester/stbt-rig>.
+<https://stb-tester.com/manual/stbt-rig>.
 
 Copyright 2017-2020 Stb-tester.com Ltd. <support@stb-tester.com>
 Released under the MIT license.
@@ -177,72 +177,6 @@ def _list_test_cases(prefix, **_kwargs):
                     ["git", "ls-files", "tests/**.py"])).strip().split("\n")]
 
 
-ARGPARSE_EPILOGUE = dedent("""\
-    AUTHENTICATION:
-      Go to the Stb-tester Portal in your web browser and create an
-      access token. See
-      https://stb-tester.com/manual/rest-api-v2#authentication
-
-      When you run this script the first time, you will be prompted to
-      type in the access token. If you have the Python "keyring"
-      package installed, we will save the token in the secure password
-      storage provided by your operating system, so that you don't have
-      to type it in again.
-
-      You can also save the access token to a file (don't commit the
-      file to the git repository!) and give the filename with
-      --portal-auth-file or put the access token in ths $STBT_AUTH_TOKEN
-      environment variable.
-
-      In Jenkins you can use the Credentials Binding plugin to pass the
-      access token in an environment variable. See the Jenkins
-      documentation below.
-
-    INTERACTIVE MODE:
-      In interactive mode (the default mode if not running inside a
-      Jenkins job) the "run" command takes a snapshot of your current
-      directory and pushes it to the branch "YOUR_USERNAME/snapshot" on
-      GitHub, so that you don't have to make lots of temporary git
-      commits to debug your test scripts.
-
-    JENKINS INTEGRATION:
-      We automatically detect if we are running inside a Jenkins job.
-      If so, we enable the following behaviours:
-
-      * Record various Jenkins parameters as "tags" in the Stb-tester
-        results:
-        - jenkins/BUILD_ID
-        - jenkins/BUILD_URL
-        - jenkins/GIT_COMMIT
-        - jenkins/JOB_NAME
-        - jenkins/SVN_REVISION
-      * Write test results in JUnit format to "stbt-results.xml" for
-        the Jenkins JUnit plugin.
-      * Stop the tests if you press the "stop" button in Jenkins.
-
-      For instructions on how to configure your Jenkins job see
-      https://stb-tester.com/manual/continuous-integration
-
-    BAMBOO INTEGRATION:
-      Similarly, we automatically detect if we are running from
-      Bamboo (Atlassian's continuous integration server):
-
-      * Read the access token from bamboo.STBT_AUTH_PASSWORD variable.
-      * Record the following Bamboo variables as "tags" in the
-        Stb-tester results:
-        - bamboo.buildPlanName
-        - bamboo.buildResultKey
-        - bamboo.buildResultsUrl
-        - bamboo.planRepository.branchName
-        - bamboo.planRepository.revision
-      * Write test results in JUnit format to "stbt-results.xml"
-        suitable for Bamboo's "JUnit Parser" task.
-      * Stop the tests if you press "Stop build" in Bamboo.
-
-      For instructions on how to configure your Bamboo job see
-      https://stb-tester.com/manual/continuous-integration
-""")
-
 ARGS = [
     Arg("-C", metavar="PATH", help="Change to directory PATH before doing "
         "anything else.", cmdline_only=True),
@@ -353,8 +287,7 @@ def argparser():
     parser = argparse.ArgumentParser(
         description="Command-line tool for interacting with the Stb-tester "
         "Portal's REST API.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=ARGPARSE_EPILOGUE)
+        formatter_class=argparse.RawDescriptionHelpFormatter)
 
     for arg in ARGS:
         arg.add(parser)
