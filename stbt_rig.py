@@ -286,8 +286,7 @@ RUN_ARGS = [
 def argparser():
     parser = argparse.ArgumentParser(
         description="Command-line tool for interacting with the Stb-tester "
-        "Portal's REST API.",
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+        "Portal's REST API. See <https://stb-tester.com/manual/stbt-rig>.")
 
     for arg in ARGS:
         arg.add(parser)
