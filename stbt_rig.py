@@ -242,7 +242,7 @@ RUN_ARGS = [
 
     Arg("--category", metavar="NAME", help="""Category to save the test-results
         in. When you are viewing test results you can filter by this string. In
-        interactive mode this defaults to "USERNAME/snapshot". In jenkins mode
+        interactive mode this defaults to the branch name. In jenkins mode
         this defaults to the Jenkins job name."""),
 
     Arg("--soak", action="store_true", help="""Run the testcases forever until
@@ -303,9 +303,9 @@ def argparser():
         description="""Run the specified testcases on the specified Stb-tester
         node. In interactive mode (the default mode if not running inside a
         Jenkins job) it also pushes a snapshot of your current test-pack and
-        pushes it to the branch YOUR_USERNAME/snapshot on GitHub, so that you
-        don't have to make lots of temporary git commits to debug your test
-        scripts.""")
+        pushes it to the branch "@YOUR_USERNAME's snapshot" on the Stb-tester
+        Portal, so that you don't have to make lots of temporary git commits to
+        debug your test scripts.""")
 
     for arg in RUN_ARGS:
         arg.add(run_parser)
@@ -321,8 +321,9 @@ def argparser():
     subcommands.add_parser(
         "snapshot", help="Push a snapshot of your current test-pack",
         description="""Take a snapshot of your current test-pack and push it
-        to the branch "YOUR_USERNAME/snapshot" on GitHub. Note that the "run"
-        command automatically does this when in interactive mode.""")
+        to the branch "@YOUR_USERNAME's snapshot" on the Stb-tester Portal.
+        Note that the "run" command automatically does this when in interactive
+        mode.""")
 
     return parser
 
