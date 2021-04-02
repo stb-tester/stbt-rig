@@ -562,6 +562,16 @@ def cmd_setup(args, node_id):
         portal = Portal.from_args(args)
         portal._get("/api/v2/user")
 
+        for k in "name", "email":
+            try:
+                subprocess.check_output(["git", "config", "user.%s" % k])
+            except subprocess.CalledProcessError as e:
+                if e.returncode == 1:
+                    v = ask("What is your %s (for git commits): " % k)
+                    subprocess.check_output(["git", "config", "user.%s" % k, v])
+                else:
+                    raise
+
         # Setup .env to include our node-id so we don't need to specify it every
         # time
         while not node_id:
