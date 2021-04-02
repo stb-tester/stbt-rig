@@ -653,11 +653,13 @@ class PortalAuthTokensAdapter(requests.adapters.HTTPAdapter):
         keyring = None
         try:
             import keyring
-            out = keyring.get_password(self.portal_url, "")
+            out = keyring.get_password(self.portal_url, "stb-tester")
             if out:
                 yield out
         except ImportError:
-            pass
+            sys.stderr.write(
+                "Install the python keyring package so you don't need to "
+                "enter your API token every time\n")
 
         while True:
             token = ask('Enter Access Token for portal %s: ' % self.portal_url)
@@ -669,7 +671,7 @@ class PortalAuthTokensAdapter(requests.adapters.HTTPAdapter):
             token = token.strip()
             if token:
                 if keyring is not None:
-                    keyring.set_password(self.portal_url, "", token)
+                    keyring.set_password(self.portal_url, "stb-tester", token)
                 else:
                     logger.warning(
                         'Failed to save access token in system keyring. '
