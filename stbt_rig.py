@@ -1328,8 +1328,12 @@ else:
                                 self, self.name, m.group(1), n + 1)
                         yield srt
 
+        @property
+        def obj(self):
+            return globals()
 
-    class StbtRemoteTest(pytest.Item):
+
+    class StbtRemoteTest(pytest.Function):
         # pylint: disable=abstract-method
         def __init__(self, parent, filename, testname, line_number):
             super(StbtRemoteTest, self).__init__(testname, parent)
@@ -1360,7 +1364,12 @@ else:
                 self.session.stbt_args.test_cases = None
 
         def reportinfo(self):
-            return self.fspath, self._line_number, ""
+            return self.fspath, self._line_number, self._testname
+
+        def _getobj(self):
+            def myfunc():
+                pass
+            return myfunc
 
     class Args(object):
         """Pretends to be the result of calling `argparser` `parse_args` so we
