@@ -1389,6 +1389,8 @@ else:
 
     def pytest_sessionstart(session):
         args = Args(session.config)
+        if session.config.option.collectonly:
+            args.command = "pytest-collect"
         session.stbt_args = args
         resolve_args(session.stbt_args)
 
