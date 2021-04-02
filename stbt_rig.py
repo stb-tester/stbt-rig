@@ -105,12 +105,12 @@ def resolve_args(args):
 
 
 def main_with_args(args):
-    portal = Portal.from_args(args)
-    node = Node(portal, args.node_id)
-
     # Do this before importing requests, we will be installing requests in here:
     if args.command == "setup":
-        return cmd_setup(args, node)
+        return cmd_setup(args, args.node_id)
+
+    portal = Portal.from_args(args)
+    node = Node(portal, args.node_id)
 
     try:
         if args.command == "run":
@@ -505,7 +505,7 @@ def cmd_snapshot(args, node):
     node.portal.notify_push()
 
 
-def cmd_setup(args, node):
+def cmd_setup(args, node_id):
     this_stbt_rig = os.path.abspath(sys.argv[0])
     root = find_test_pack_root()
 
@@ -564,24 +564,35 @@ def cmd_setup(args, node):
 
         # Setup .env to include our node-id so we don't need to specify it every
         # time
-        if node.node_id:
-            node_id = node.node_id
-        else:
+        while not node_id:
             r = portal._get("/api/_private/workgroup")
             r.raise_for_status()
-            nodes = r.json()
+            nodes = [n['id'] for n in r.json()]
             assert nodes
             if len(nodes) == 1:
-                node_id = nodes[0]["id"]
+                node_id = nodes[0]
             else:
                 sys.stderr.write("These nodes are attached to the portal:\n")
-                for n in nodes:
-                    sys.stderr.write("  %s\n" % n["id"])
-                node_id = ask("Which node do you want to use by default? ")
+                for (n, node) in enumerate(nodes, 1):
+                    sys.stderr.write("  %i) %s\n" % (n, node))
+                node_no = ask("Which node do you want to use by default? ")
+                try:
+                    node_idx = int(node_no) - 1
+                    if node_idx < 0:
+                        raise ValueError()
+                    node_id = nodes[node_idx]
+                except (ValueError, IndexError):
+                    sys.stderr.write(
+                        "%r is not a valid number, please enter a value "
+                        "between 1 and %i\n" % (node_no, len(nodes)))
+                    continue
+            if node_id not in nodes:
+                sys.stderr.write(
+                    "%r is not a node attached to this portal.  Try again.\n" %
+                    node_id)
 
         sys.stderr.write(
-            "Selected %s as the default node to use.  Edit .env to change\n" %
-            node_id)
+            "Node %s will be used by default.  Edit .env to change\n" % node_id)
 
         updates = {}
         updates[b"STBT_NODE_ID"] = node_id.encode("utf-8")
