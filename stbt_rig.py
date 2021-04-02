@@ -30,6 +30,7 @@ import tempfile
 import time
 from collections import namedtuple
 from contextlib import contextmanager
+from distutils.spawn import find_executable
 from textwrap import dedent
 
 try:
@@ -514,9 +515,21 @@ def cmd_setup(args, node_id):
         stbt_version = int(config_parser.get("test_pack", "stbt_version"))
         python_version = config_parser.get("test_pack", "python_version")
 
-        # Create venv
-        subprocess.check_call(
-            ["python%s" % python_version, '-m', 'venv', '.venv'], cwd=root)
+        if not os.path.exists("%s/.venv" % root):
+            python = None
+            for python in (["python%s" % python_version],
+                           ["py", "-%s" % python_version]):
+                if find_executable(python[0]):
+                    break
+            else:
+                die("Can't find python %s in PATH" % python_version)
+
+            # Create venv
+            subprocess.check_call(python + ['-m', 'venv', '.venv'], cwd=root)
+
+        os.environ["VIRTUAL_ENV"] = "%s/.venv" % root
+        os.environ["PATH"] = "%s/.venv/bin/:%s/.venv/Scripts/:%s" % (
+            root, root, os.environ["PATH"])
 
         # Install dependencies
         pip_deps = [
@@ -528,18 +541,21 @@ def cmd_setup(args, node_id):
             "keyring",
             "requests"]
 
-        subprocess.check_call(
-            ["%s/.venv/bin/pip" % root, 'install', "--upgrade", 'pip'],
-            cwd=root)
-        subprocess.check_call(
-            ["%s/.venv/bin/pip" % root, 'install'] + pip_deps, cwd=root)
+        pip = _venv_exe("pip", root)
+        subprocess.check_call([pip, 'install', "--upgrade", 'pip'], cwd=root)
+        subprocess.check_call([pip, 'install'] + pip_deps, cwd=root)
 
         os.environ["STBT_RIG_SECOND_STAGE"] = "1"
 
         # We re-exec ourselves into the venv now that we've installed all our
         # dependencies
-        os.execv("%s/.venv/bin/python" % root,
-                 ["%s/.venv/bin/python" % root, this_stbt_rig] + sys.argv[1:])
+        cmd = [_venv_exe("python", root), this_stbt_rig] + sys.argv[1:]
+        if platform.system() == "Windows":
+            # Windows has execv, but the process ends up backgrounded which
+            # breaks interactive use, so subprocess instead.
+            os._exit(subprocess.call(cmd))
+        else:
+            os.execv(cmd[0], cmd)
     else:
         # Install ourselves as a python module in the venv:
         venv_site_packages = sys.path[-1]
@@ -612,14 +628,29 @@ def cmd_setup(args, node_id):
             _update_vscode_config()
 
 
+def _venv_exe(exe, root=None):
+    if root is None:
+        root = ""
+    elif not root.endswith("/"):
+        root += "/"
+    for x in ['%s.venv/bin/%s', '%s.venv/Scripts/%s.exe']:
+        f = x % (root, exe)
+        if os.path.exists(f):
+            return f
+    raise EnvironmentError("No exe %s found in venv" % exe)
+
+
 def _update_vscode_config():
     import json
 
     VS_CODE_CONFIG = {
         "python.linting.pylintEnabled": True,
         "python.linting.enabled": True,
+        "python.linting.pylintPath": (
+            "${workspaceFolder}/%s" % _venv_exe("pylint")),
         "python.linting.pylintArgs": ["--load-plugins=stbt.pylint_plugin"],
-        "python.testing.pytestPath": "${workspaceFolder}/.venv/bin/pytest",
+        "python.testing.pytestPath": (
+            "${workspaceFolder}/%s" % _venv_exe("pytest")),
         "python.testing.pytestArgs": [
             "-p", "stbt_rig",
             "-p", "no:python",
@@ -642,7 +673,7 @@ def _update_vscode_config():
         "python.testing.nosetestsEnabled": False,
         "python.testing.pytestEnabled": True,
         "python.linting.mypyEnabled": False,
-        "python.pythonPath": "${workspaceFolder}/.venv/bin/python",
+        "python.pythonPath": "${workspaceFolder}/" + _venv_exe("python"),
         "python.envFile": "${workspaceFolder}/.env"
     }
     try:
