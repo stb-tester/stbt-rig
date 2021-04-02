@@ -37,9 +37,11 @@ import requests
 
 try:
     import configparser
+    ConfigParser = configparser.ConfigParser
 except ImportError:
     # Python 2
     import ConfigParser as configparser
+    ConfigParser = configparser.SafeConfigParser
 
 try:
     # Bash tab-completion, if python-argcomplete is installed
@@ -684,7 +686,7 @@ def read_stbt_conf(root):
     traverse them for the purposes of loading .stbt.conf.
     """
     root = os.path.abspath(root)
-    cp = configparser.SafeConfigParser()
+    cp = ConfigParser()
     filename = os.path.join(root, '.stbt.conf')
     for _ in range(10):
         try:
