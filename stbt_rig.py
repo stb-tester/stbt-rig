@@ -660,10 +660,7 @@ class PortalAuthTokensAdapter(requests.adapters.HTTPAdapter):
             pass
 
         while True:
-            sys.stderr.write(
-                'Enter Access Token for portal %s: ' % self.portal_url)
-            sys.stderr.flush()
-            token = sys.stdin.readline()
+            token = ask('Enter Access Token for portal %s: ' % self.portal_url)
             if not token:
                 # EOF
                 sys.stderr.write("EOF!\n")
@@ -1507,6 +1504,7 @@ if sys.version_info.major == 3:
         raise exc
 
     unicode = str
+    ask = input
 else:
     # `raise a, b, c` is a syntax error on Python 3 (even though we don't run
     # this block with Python 3, Python still has to parse it). Hence `exec`.
@@ -1515,6 +1513,7 @@ else:
         def raise_(tp, value=None, tb=None):
             raise tp, value, tb
         '''))
+    ask = raw_input  # pylint: disable=undefined-variable
 
 
 if __name__ == '__main__':
