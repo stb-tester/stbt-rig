@@ -1278,7 +1278,10 @@ class RetryTimeout(requests.exceptions.Timeout):
 
 try:
     import pytest
-
+except ImportError:
+    # Pytest integration is optional
+    pass
+else:
     def pytest_addoption(parser):
         group = parser.getgroup("stbt", "stb-tester REST API")
         for arg in itertools.chain(ARGS, RUN_ARGS):
@@ -1404,9 +1407,6 @@ try:
         session.stbt_node = node
         session.stbt_run_prep = j
 
-except ImportError:
-    # Pytest integration is optional
-    pass
 
 
 @contextmanager
