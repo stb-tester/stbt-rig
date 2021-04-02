@@ -1320,12 +1320,11 @@ else:
                             # pytest >v5.4
                             srt = StbtRemoteTest.from_parent(  # pylint:disable=no-member
                                 parent=self, filename=self.name,
-                                testname=m.group(1), line_number=n + 1)
+                                testname=m.group(1), line_number=n)
                         else:
                             # Backwards compat
                             # https://docs.pytest.org/en/stable/deprecations.html#node-construction-changed-to-node-from-parent
-                            srt = StbtRemoteTest(
-                                self, self.name, m.group(1), n + 1)
+                            srt = StbtRemoteTest(self, self.name, m.group(1), n)
                         yield srt
 
         @property
