@@ -1287,6 +1287,7 @@ class RetryTimeout(requests.exceptions.Timeout):
     pass
 
 
+PYTEST = False
 try:
     import pytest
 except ImportError:
@@ -1294,6 +1295,8 @@ except ImportError:
     pass
 else:
     def pytest_addoption(parser):
+        global PYTEST  # pylint: disable=global-statement
+        PYTEST = True
         group = parser.getgroup("stbt", "stb-tester REST API")
         for arg in itertools.chain(ARGS, RUN_ARGS):
             if arg.cmdline_only:
@@ -1520,8 +1523,11 @@ def mkdir_p(d):
 
 
 def die(message, *args):
-    logger.error(message, *args)
-    sys.exit(1)
+    if PYTEST:
+        raise Exception(message % args)
+    else:
+        logger.error(message, *args)
+        sys.exit(1)
 
 
 def to_bytes(text):
