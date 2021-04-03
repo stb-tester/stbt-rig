@@ -711,9 +711,17 @@ def read_stbt_conf(root):
 class TestFailure(AssertionError):
     result = 'fail'
 
+    def __init__(self, message, traceback):
+        super(TestFailure, self).__init__(message)
+        self.traceback = traceback
+
 
 class TestError(Exception):
     result = 'error'
+
+    def __init__(self, message, traceback):
+        super(TestError, self).__init__(message)
+        self.traceback = traceback
 
 
 class Result(object):
@@ -818,9 +826,10 @@ class Result(object):
             self.json = response.json()
 
         if self.json['result'] == 'error':
-            raise TestError(self.json['traceback'])
+            raise TestError(self.json['failure_reason'], self.json['traceback'])
         elif self.json['result'] == 'fail':
-            raise TestFailure(self.json['traceback'])
+            raise TestFailure(self.json['failure_reason'],
+                              self.json['traceback'])
 
 
 def _get_local_timezone():
@@ -1369,6 +1378,41 @@ else:
             def myfunc():
                 pass
             return myfunc
+
+        def repr_failure(self, excinfo, style=None):  # pylint: disable=arguments-differ
+            if issubclass(excinfo.type, (TestFailure, TestError)):
+                return _reformat_traceback(excinfo.value)
+
+            # Some versions of pytest have a style argument, some don't -
+            # support both:
+            if style is not None:
+                return super(StbtRemoteTest, self).repr_failure(excinfo, style)
+            else:
+                return super(StbtRemoteTest, self).repr_failure(excinfo)
+
+
+    def _reformat_traceback(exc):
+        out = str(exc) + "\n"
+        lines = iter(exc.traceback.split('\n'))
+        for line in lines:
+            if line.startswith("Traceback"):
+                continue
+            m = re.match(r'  File "(.*)", line (\d+),(.*)', line)
+            if m:
+                filename, lineno, linestr = m.groups()
+                if "/stbt_run.py" in filename:
+                    next(lines)
+                    continue
+                if not filename.startswith("/"):
+                    out += "%s:%s:%s\n" % (filename, lineno, linestr)
+                else:
+                    # Avoid triggering "Unable to read file" because the file
+                    # listed in the traceback isn't available locally:
+                    out += "%s;%s;%s\n" % (filename, lineno, linestr)
+            else:
+                out += line + "\n"
+        return out
+
 
     class Args(object):
         """Pretends to be the result of calling `argparser` `parse_args` so we
