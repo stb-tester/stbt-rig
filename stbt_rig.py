@@ -37,9 +37,11 @@ import requests
 
 try:
     import configparser
+    ConfigParser = configparser.ConfigParser
 except ImportError:
     # Python 2
     import ConfigParser as configparser
+    ConfigParser = configparser.SafeConfigParser
 
 try:
     # Bash tab-completion, if python-argcomplete is installed
@@ -584,17 +586,16 @@ class PortalAuthTokensAdapter(requests.adapters.HTTPAdapter):
         keyring = None
         try:
             import keyring
-            out = keyring.get_password(self.portal_url, "")
+            out = keyring.get_password(self.portal_url, "stb-tester")
             if out:
                 yield out
         except ImportError:
-            pass
+            sys.stderr.write(
+                "Install the python keyring package so you don't need to "
+                "enter your API token every time\n")
 
         while True:
-            sys.stderr.write(
-                'Enter Access Token for portal %s: ' % self.portal_url)
-            sys.stderr.flush()
-            token = sys.stdin.readline()
+            token = ask('Enter Access Token for portal %s: ' % self.portal_url)
             if not token:
                 # EOF
                 sys.stderr.write("EOF!\n")
@@ -603,7 +604,7 @@ class PortalAuthTokensAdapter(requests.adapters.HTTPAdapter):
             token = token.strip()
             if token:
                 if keyring is not None:
-                    keyring.set_password(self.portal_url, "", token)
+                    keyring.set_password(self.portal_url, "stb-tester", token)
                 else:
                     logger.warning(
                         'Failed to save access token in system keyring. '
@@ -617,7 +618,7 @@ def read_stbt_conf(root):
     traverse them for the purposes of loading .stbt.conf.
     """
     root = os.path.abspath(root)
-    cp = configparser.SafeConfigParser()
+    cp = ConfigParser()
     filename = os.path.join(root, '.stbt.conf')
     for _ in range(10):
         try:
@@ -643,9 +644,17 @@ def read_stbt_conf(root):
 class TestFailure(AssertionError):
     result = 'fail'
 
+    def __init__(self, message, traceback):
+        super(TestFailure, self).__init__(message)
+        self.traceback = traceback
+
 
 class TestError(Exception):
     result = 'error'
+
+    def __init__(self, message, traceback):
+        super(TestError, self).__init__(message)
+        self.traceback = traceback
 
 
 class Result(object):
@@ -750,9 +759,10 @@ class Result(object):
             self.json = response.json()
 
         if self.json['result'] == 'error':
-            raise TestError(self.json['traceback'])
+            raise TestError(self.json['failure_reason'], self.json['traceback'])
         elif self.json['result'] == 'fail':
-            raise TestFailure(self.json['traceback'])
+            raise TestFailure(self.json['failure_reason'],
+                              self.json['traceback'])
 
 
 def _get_local_timezone():
@@ -1210,10 +1220,16 @@ class RetryTimeout(requests.exceptions.Timeout):
     pass
 
 
+PYTEST = False
 try:
     import pytest
-
+except ImportError:
+    # Pytest integration is optional
+    pass
+else:
     def pytest_addoption(parser):
+        global PYTEST  # pylint: disable=global-statement
+        PYTEST = True
         group = parser.getgroup("stbt", "stb-tester REST API")
         for arg in itertools.chain(ARGS, RUN_ARGS):
             if arg.cmdline_only:
@@ -1249,16 +1265,19 @@ try:
                             # pytest >v5.4
                             srt = StbtRemoteTest.from_parent(  # pylint:disable=no-member
                                 parent=self, filename=self.name,
-                                testname=m.group(1), line_number=n + 1)
+                                testname=m.group(1), line_number=n)
                         else:
                             # Backwards compat
                             # https://docs.pytest.org/en/stable/deprecations.html#node-construction-changed-to-node-from-parent
-                            srt = StbtRemoteTest(
-                                self, self.name, m.group(1), n + 1)
+                            srt = StbtRemoteTest(self, self.name, m.group(1), n)
                         yield srt
 
+        @property
+        def obj(self):
+            return globals()
 
-    class StbtRemoteTest(pytest.Item):
+
+    class StbtRemoteTest(pytest.Function):
         # pylint: disable=abstract-method
         def __init__(self, parent, filename, testname, line_number):
             super(StbtRemoteTest, self).__init__(testname, parent)
@@ -1289,7 +1308,47 @@ try:
                 self.session.stbt_args.test_cases = None
 
         def reportinfo(self):
-            return self.fspath, self._line_number, ""
+            return self.fspath, self._line_number, self._testname
+
+        def _getobj(self):
+            def myfunc():
+                pass
+            return myfunc
+
+        def repr_failure(self, excinfo, style=None):  # pylint: disable=arguments-differ
+            if issubclass(excinfo.type, (TestFailure, TestError)):
+                return _reformat_traceback(excinfo.value)
+
+            # Some versions of pytest have a style argument, some don't -
+            # support both:
+            if style is not None:
+                return super(StbtRemoteTest, self).repr_failure(excinfo, style)
+            else:
+                return super(StbtRemoteTest, self).repr_failure(excinfo)
+
+
+    def _reformat_traceback(exc):
+        out = str(exc) + "\n"
+        lines = iter(exc.traceback.split('\n'))
+        for line in lines:
+            if line.startswith("Traceback"):
+                continue
+            m = re.match(r'  File "(.*)", line (\d+),(.*)', line)
+            if m:
+                filename, lineno, linestr = m.groups()
+                if "/stbt_run.py" in filename:
+                    next(lines)
+                    continue
+                if not filename.startswith("/"):
+                    out += "%s:%s:%s\n" % (filename, lineno, linestr)
+                else:
+                    # Avoid triggering "Unable to read file" because the file
+                    # listed in the traceback isn't available locally:
+                    out += "%s;%s;%s\n" % (filename, lineno, linestr)
+            else:
+                out += line + "\n"
+        return out
+
 
     class Args(object):
         """Pretends to be the result of calling `argparser` `parse_args` so we
@@ -1309,6 +1368,8 @@ try:
 
     def pytest_sessionstart(session):
         args = Args(session.config)
+        if session.config.option.collectonly:
+            args.command = "pytest-collect"
         session.stbt_args = args
         resolve_args(session.stbt_args)
 
@@ -1338,9 +1399,6 @@ try:
         session.stbt_node = node
         session.stbt_run_prep = j
 
-except ImportError:
-    # Pytest integration is optional
-    pass
 
 
 @contextmanager
@@ -1398,8 +1456,11 @@ def mkdir_p(d):
 
 
 def die(message, *args):
-    logger.error(message, *args)
-    sys.exit(1)
+    if PYTEST:
+        raise Exception(message % args)
+    else:
+        logger.error(message, *args)
+        sys.exit(1)
 
 
 def to_bytes(text):
@@ -1438,6 +1499,7 @@ if sys.version_info.major == 3:
         raise exc
 
     unicode = str
+    ask = input
 else:
     # `raise a, b, c` is a syntax error on Python 3 (even though we don't run
     # this block with Python 3, Python still has to parse it). Hence `exec`.
@@ -1446,6 +1508,7 @@ else:
         def raise_(tp, value=None, tb=None):
             raise tp, value, tb
         '''))
+    ask = raw_input  # pylint: disable=undefined-variable
 
 
 if __name__ == '__main__':
