@@ -519,8 +519,16 @@ def cmd_setup(args, node_id):
             python = None
             for python in (["python%s" % python_version],
                            ["py", "-%s" % python_version]):
-                if find_executable(python[0]):
-                    break
+                exe = find_executable(python[0])
+                if not exe:
+                    # Doesn't exist
+                    continue
+                if platform.system() == "Windows" and os.stat(exe).st_size == 0:
+                    # It's a Windows "execution alias".  Running it will just
+                    # fail with an error.  See
+                    # https://www.tiraniddo.dev/2019/09/overview-of-windows-execution-aliases.html
+                    continue
+                break
             else:
                 die("Can't find python %s in PATH" % python_version)
 
