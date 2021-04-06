@@ -1256,20 +1256,27 @@ else:
     class StbtCollector(pytest.File):
         # pylint: disable=abstract-method
         def collect(self):
-            with open(self.fspath.strpath) as f:
+            with open(self.fspath.strpath, 'rb') as f:
                 # We implement our own parsing to avoid import stbt ImportErrors
                 for n, line in enumerate(f):
-                    m = re.match(r'^def\s+(test_[a-zA-Z0-9_]*)', line)
+                    m = re.match(br'^def\s+(test_[a-zA-Z0-9_]*)', line)
                     if m:
+                        if sys.version_info.major == 2:
+                            testname = m.group(1)
+                        else:
+                            try:
+                                testname = m.group(1).decode('utf-8')
+                            except UnicodeDecodeError:
+                                continue
                         if hasattr(StbtRemoteTest, "from_parent"):
                             # pytest >v5.4
                             srt = StbtRemoteTest.from_parent(  # pylint:disable=no-member
                                 parent=self, filename=self.name,
-                                testname=m.group(1), line_number=n)
+                                testname=testname, line_number=n)
                         else:
                             # Backwards compat
                             # https://docs.pytest.org/en/stable/deprecations.html#node-construction-changed-to-node-from-parent
-                            srt = StbtRemoteTest(self, self.name, m.group(1), n)
+                            srt = StbtRemoteTest(self, self.name, testname, n)
                         yield srt
 
         @property

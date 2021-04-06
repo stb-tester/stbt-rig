@@ -363,7 +363,7 @@ def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
     portal_mock.expect_run_tests(test_cases=['tests/test.py::test_my_tests'],
                                  node_id="mynode")
     env = os.environ.copy()
-    env['PYTHONPATH'] = os.path.dirname(os.path.abspath(__file__))
+    env['PYTHONPATH'] = _find_file('.')
     subprocess.check_call([
         python, '-m', 'pytest', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
         '--portal-url=%s' % portal_mock.url, '--portal-auth-file=token',
@@ -382,7 +382,7 @@ def test_run_tests_pytest_unauthorised(test_pack, tmpdir, portal_mock):
     with open('token', 'w') as f:
         f.write("this is my token")
     env = os.environ.copy()
-    env['PYTHONPATH'] = os.path.dirname(os.path.abspath(__file__))
+    env['PYTHONPATH'] = _find_file('.')
     subprocess.check_call([
         "git", "remote", "set-url", "origin",
         "http://%s:%i/unauthorised.git" % portal_mock.address])
@@ -401,6 +401,21 @@ def test_run_tests_pytest_unauthorised(test_pack, tmpdir, portal_mock):
             b"Authentication failed for" in e.output)
     finally:
         subprocess.check_call(["git", "remote", "set-url", "origin", "."])
+
+
+def test_collect_tests_pytest():
+    EXPECTED = (
+        b"StbtRemoteTest('test-pack/tests/mytest.py', 'test_its_a_test', 2)")
+    env = os.environ.copy()
+    env['PYTHONPATH'] = _find_file('.')
+
+    output = subprocess.check_output(
+        [python, '-m', 'pytest', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
+         '--collect-only'],
+        env=env, cwd=_find_file("test-pack"),
+        stderr=subprocess.STDOUT)
+    print(output)
+    assert EXPECTED in output
 
 
 def test_run_tests_jenkins(tmpdir, portal_mock):
@@ -432,3 +447,7 @@ def run_tests_ci(portal_mock, env):
          "run", "tests/test.py::test_my_tests"],
         env=env, timeout=10)
     assert open("stbt-results.xml").read() == PortalMock.RESULTS_XML
+
+
+def _find_file(path, root=os.path.dirname(os.path.abspath(__file__))):
+    return os.path.join(root, path)
