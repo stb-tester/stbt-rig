@@ -548,6 +548,7 @@ def cmd_setup(args, node_id):
         print()
         try:
             print("activate:")
+            # pylint: disable=bad-continuation
             with open(os.path.join(
                     root, ".venv", "Scripts", "activate.bat")) as f:
                 print(f.read())
