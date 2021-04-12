@@ -63,7 +63,7 @@ def setup_test_pack(tmpdir, portal_url="https://example.stb-tester.com"):
     os.mkdir(tp("tests"))
     with open(tp("tests/test.py"), 'w') as f:
         f.write("def test_my_tests():\n    pass\n")
-    with open(tp("tests/syntax_error.py"), 'w') as f:
+    with open(tp("tests/syntax_error.py"), 'wb') as f:
         f.write(
             b'# codec: utf-8\n\n'
             b'def test_its_a_test():\n\n'
