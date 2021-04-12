@@ -30,7 +30,6 @@ import tempfile
 import time
 from collections import namedtuple
 from contextlib import contextmanager
-from distutils.spawn import find_executable
 from textwrap import dedent
 
 try:
@@ -519,16 +518,13 @@ def cmd_setup(args, node_id):
             python = None
             for python in (["python%s" % python_version],
                            ["py", "-%s" % python_version]):
-                exe = find_executable(python[0])
-                if not exe:
-                    # Doesn't exist
-                    continue
-                if platform.system() == "Windows" and os.stat(exe).st_size == 0:
-                    # It's a Windows "execution alias".  Running it will just
-                    # fail with an error.  See
-                    # https://www.tiraniddo.dev/2019/09/overview-of-windows-execution-aliases.html
-                    continue
-                break
+                try:
+                    subprocess.check_output(
+                        python + ["-c", ""], stdin=open(os.devnull))
+                    break
+                except (subprocess.CalledProcessError, OSError):
+                    # Doesn't exist, or there's something wrong with it
+                    pass
             else:
                 die("Can't find python %s in PATH" % python_version)
 
