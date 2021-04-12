@@ -519,9 +519,11 @@ def cmd_setup(args, node_id):
             for python in (["python%s" % python_version],
                            ["py", "-%s" % python_version]):
                 try:
-                    subprocess.check_output(
-                        python + ["-c", ""], stdin=open(os.devnull))
-                    break
+                    o = subprocess.check_output(
+                        python + ["-c", "print('Python Works!')"],
+                        stdin=open(os.devnull)).strip()
+                    if o == "Python Works!":
+                        break
                 except (subprocess.CalledProcessError, OSError):
                     # Doesn't exist, or there's something wrong with it
                     pass
