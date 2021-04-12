@@ -15,10 +15,16 @@ jobs:
       matrix:
         environment: ["ubuntu-latest", "macos-latest", "windows-latest"]
         python-version: [2.7, 3.5, 3.6, 3.7, 3.8]
+        include:
+          - environment: ubuntu-latest
+            setup: dbus-run-session sh -c 'env $(echo password | gnome-keyring-daemon --unlock) "$0" "$@"'
 
     runs-on: ${{ matrix.environment }}
     steps:
     - uses: actions/checkout@v2
+    - name: Install gnome keyring
+      run: sudo apt-get install gnome-keyring
+      if: ${{ matrix.environment == 'ubuntu-latest' }}
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
       with:
@@ -26,4 +32,4 @@ jobs:
     - name: Install dependencies
       run: pip install -r requirements.txt
     - name: Test with pytest
-      run: pytest -vv
+      run: ${{ matrix.setup }} pytest -vv
