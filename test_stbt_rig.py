@@ -214,7 +214,7 @@ def test_collect_tests_pytest(test_pack):
          '--collect-only'],
         stderr=subprocess.STDOUT)
     print(output)
-    assert EXPECTED in output.split('\n')
+    assert EXPECTED in output.split(b'\n')
 
 
 def test_run_tests_jenkins(tmpdir, portal_mock):
