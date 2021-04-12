@@ -551,7 +551,7 @@ def cmd_setup(args, node_id):
             with open(".venv/activate.bat") as f:
                 print(f.read())
             print("=== end")
-        except OSError:
+        except (OSError, IOError):
             pass
 
         # Install dependencies
