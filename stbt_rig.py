@@ -517,12 +517,13 @@ def cmd_setup(args, node_id):
         if not os.path.exists("%s/.venv" % root):
             python = None
             for python in (["python%s" % python_version],
-                           ["py", "-%s" % python_version]):
+                           ["py", "-%s" % python_version],
+                           ["python"]):
                 try:
                     o = subprocess.check_output(
-                        python + ["-c", "print('Python Works!')"],
+                        python + ["-c", "import sys; print(sys.version)"],
                         stdin=open(os.devnull)).strip()
-                    if o == "Python Works!":
+                    if o.startswith("%s." % python_version):
                         break
                 except (subprocess.CalledProcessError, OSError):
                     # Doesn't exist, or there's something wrong with it
