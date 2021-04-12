@@ -25,8 +25,8 @@ def test_setup(tmpdir, portal_mock):
     env.pop("PYTHONPATH", None)
     venv = env.pop("VIRTUAL_ENV", None)
     if venv and venv in env['PATH']:
-        env['PATH'] = ':'.join(
-            x for x in env["PATH"].split(':') if venv not in x)
+        env['PATH'] = os.pathsep.join(
+            x for x in env["PATH"].split(os.pathsep) if venv not in x)
 
     try:
         # Python 3

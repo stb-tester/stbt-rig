@@ -538,12 +538,12 @@ def cmd_setup(args, node_id):
             print("%s=%s" % (k, v))
 
         if platform.system() == "Windows":
-            extra_path = "Scripts"
+            b = "Scripts"
         else:
-            extra_path = "bin"
-        os.environ["VIRTUAL_ENV"] = os.path.join(root, ".venv")
-        os.environ["PATH"] = (os.path.join(root, ".venv", extra_path) + ":" +
+            b = "bin"
+        os.environ["PATH"] = (os.path.join(root, ".venv", b) + os.pathsep +
                               os.environ.get("PATH", ""))
+        os.environ["VIRTUAL_ENV"] = os.path.join(root, ".venv")
 
         print()
         try:
