@@ -564,15 +564,14 @@ def cmd_setup(args, node_id):
             "keyring",
             "requests"]
 
-        pip = _venv_exe("pip", root)
-        subprocess.check_call([pip, 'install', '--upgrade', 'pip'], cwd=root)
-        subprocess.check_call([pip, 'install'] + pip_deps, cwd=root)
+        subprocess.check_call(["python", "-m", "pip", 'install', '--upgrade', 'pip'], cwd=root)
+        subprocess.check_call(["python", "-m", "pip", 'install'] + pip_deps, cwd=root)
 
         os.environ["STBT_RIG_SECOND_STAGE"] = "1"
 
         # We re-exec ourselves into the venv now that we've installed all our
         # dependencies
-        cmd = [_venv_exe("python", root), this_stbt_rig] + sys.argv[1:]
+        cmd = ["python", this_stbt_rig] + sys.argv[1:]
         if platform.system() == "Windows":
             # Windows has execv, but the process ends up backgrounded which
             # breaks interactive use, so subprocess instead.
