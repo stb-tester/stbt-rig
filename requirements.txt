@@ -6,6 +6,8 @@ tzlocal
 
 # Dependencies of the tests
 requests-mock
+# No desktop environment is provided in CI, so we install this keyring backend:
+keyrings.cryptfile ; sys_platform == 'linux2'
 pexpect==4.8
 pylint==1.8.3
 astroid==1.6.0
