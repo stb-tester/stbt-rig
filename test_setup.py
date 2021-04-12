@@ -22,12 +22,18 @@ def test_setup(tmpdir, portal_mock):
             x for x in env["PATH"].split(':') if venv not in x)
 
     try:
+        # Python 3
+        stderr = sys.stderr.buffer
+    except AttributeError:
+        stderr = sys.stderr
+
+    try:
         e = pexpect.spawn("python stbt_rig.py setup", cwd=test_pack,
-                          logfile=sys.stderr)
+                          logfile=stderr)
     except AttributeError:
         # Windows:
         e = pexpect.popen_spawn.PopenSpawn(
-            "python stbt_rig.py setup", cwd=test_pack, logfile=sys.stderr)
+            "python stbt_rig.py setup", cwd=test_pack, logfile=stderr)
     e.expect("Enter Access Token for portal %s:" % portal_mock.url,
              timeout=120)
     e.sendline("this is my token")
