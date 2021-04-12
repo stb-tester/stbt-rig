@@ -516,9 +516,9 @@ def cmd_setup(args, node_id):
 
         if not os.path.exists("%s/.venv" % root):
             python = None
-            for python in (["python%s" % python_version],
-                           ["py", "-%s" % python_version],
-                           ["python"]):
+            for python in (["python"],
+                           ["python%s" % python_version],
+                           ["py", "-%s" % python_version]):
                 try:
                     o = subprocess.check_output(
                         python + ["-c", "import sys; print(sys.version)"],
