@@ -534,9 +534,13 @@ def cmd_setup(args, node_id):
             # Create venv
             subprocess.check_call(python + ['-m', 'venv', '.venv'], cwd=root)
 
-        os.environ["VIRTUAL_ENV"] = "%s/.venv" % root
-        os.environ["PATH"] = "%s/.venv/bin/:%s/.venv/Scripts/:%s" % (
-            root, root, os.environ["PATH"])
+        if platform.system() == "Windows":
+            extra_path = "Scripts"
+        else:
+            extra_path = "bin"
+        os.environ["VIRTUAL_ENV"] = os.path.join(root, ".venv")
+        os.environ["PATH"] = (os.path.join(root, ".venv", extra_path) + ":" +
+                              os.environ.get("PATH", ""))
 
         # Install dependencies
         pip_deps = [
