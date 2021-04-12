@@ -548,7 +548,7 @@ def cmd_setup(args, node_id):
         print()
         try:
             print("activate:")
-            with open(".venv/activate.bat") as f:
+            with open(os.path.join(root, ".venv", "activate.bat") as f:
                 print(f.read())
             print("=== end")
         except (OSError, IOError):
