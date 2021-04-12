@@ -534,6 +534,9 @@ def cmd_setup(args, node_id):
             # Create venv
             subprocess.check_call(python + ['-m', 'venv', '.venv'], cwd=root)
 
+        for k, v in os.environ.items():
+            print("%s=%s" % (k, v))
+
         if platform.system() == "Windows":
             extra_path = "Scripts"
         else:
@@ -541,6 +544,15 @@ def cmd_setup(args, node_id):
         os.environ["VIRTUAL_ENV"] = os.path.join(root, ".venv")
         os.environ["PATH"] = (os.path.join(root, ".venv", extra_path) + ":" +
                               os.environ.get("PATH", ""))
+
+        print()
+        try:
+            print("activate:")
+            with open(".venv/activate.bat") as f:
+                print(f.read())
+            print("=== end")
+        except OSError:
+            pass
 
         # Install dependencies
         pip_deps = [
@@ -553,7 +565,7 @@ def cmd_setup(args, node_id):
             "requests"]
 
         pip = _venv_exe("pip", root)
-        subprocess.check_call([pip, 'install', "--upgrade", 'pip'], cwd=root)
+        subprocess.check_call([pip, 'install', 'pip'], cwd=root)
         subprocess.check_call([pip, 'install'] + pip_deps, cwd=root)
 
         os.environ["STBT_RIG_SECOND_STAGE"] = "1"
