@@ -564,8 +564,10 @@ def cmd_setup(args, node_id):
             "keyring",
             "requests"]
 
-        subprocess.check_call(["python", "-m", "pip", 'install', '--upgrade', 'pip'], cwd=root)
-        subprocess.check_call(["python", "-m", "pip", 'install'] + pip_deps, cwd=root)
+        subprocess.check_call(
+            ["python", "-m", "pip", 'install', '--upgrade', 'pip'], cwd=root)
+        subprocess.check_call(
+            ["python", "-m", "pip", 'install'] + pip_deps, cwd=root)
 
         os.environ["STBT_RIG_SECOND_STAGE"] = "1"
 
