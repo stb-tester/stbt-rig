@@ -36,7 +36,8 @@ def test_setup(tmpdir, portal_mock):
                           logfile=stderr)
     except AttributeError:
         # Windows:
-        e = pexpect.popen_spawn.PopenSpawn(
+        from pexpect.popen_spawn import PopenSpawn
+        e = PopenSpawn(
             "python stbt_rig.py setup", cwd=test_pack, logfile=stderr)
     e.expect("Enter Access Token for portal %s:" % portal_mock.url,
              timeout=300)
