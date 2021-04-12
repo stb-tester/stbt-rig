@@ -16,54 +16,7 @@ import requests
 
 import stbt_rig
 from stbt_rig import to_native_str, to_unicode
-
-try:
-    # Needed for timeout argument to wait on Python 2.7
-    import subprocess32 as subprocess
-except ImportError:
-    import subprocess
-
-
-@pytest.fixture(scope="function", name="tmpdir")
-def fixture_tmpdir():
-    with stbt_rig.named_temporary_directory(ignore_errors=True) as d:
-        origdir = os.path.abspath(os.curdir)
-        try:
-            os.mkdir("%s/test-pack" % d)
-            os.chdir("%s/test-pack" % d)
-            yield d
-        finally:
-            os.chdir(origdir)
-
-
-@pytest.fixture(scope="function", name="test_pack")
-def fixture_test_pack(tmpdir):  # pylint: disable=unused-argument
-    os.mkdir("../upstream")
-    subprocess.check_call(['git', 'init', '--bare'], cwd="../upstream")
-
-    subprocess.check_call(['git', 'clone', '../upstream', '.'])
-    subprocess.check_call([
-        'git', 'config', 'user.email', 'stbt-rig@stb-tester.com'])
-    subprocess.check_call(['git', 'config', 'user.name', 'stbt-rig tests'])
-
-    with open(".stbt.conf", "w") as f:
-        f.write(dedent("""\
-            [test_pack]
-            portal_url = https://example.stb-tester.com
-            """))
-    with open(".gitignore", "w") as f:
-        f.write("token")
-    with open("moo", 'w') as f:
-        f.write("Hello!\n")
-    os.mkdir("tests")
-    with open("tests/test.py", 'w') as f:
-        f.write("def test_my_tests():\n    pass\n")
-    subprocess.check_call(
-        ['git', 'add', '.stbt.conf', 'moo', '.gitignore', 'tests/test.py'])
-    subprocess.check_call(['git', 'commit', '-m', 'Test'])
-    subprocess.check_call(['git', 'push', '-u', 'origin', 'master:mybranch'])
-
-    return stbt_rig.TestPack()
+from conftest import subprocess
 
 
 def test_testpack_snapshot_no_change_if_no_commits(test_pack):
@@ -403,19 +356,16 @@ def test_run_tests_pytest_unauthorised(test_pack, tmpdir, portal_mock):
         subprocess.check_call(["git", "remote", "set-url", "origin", "."])
 
 
-def test_collect_tests_pytest():
+def test_collect_tests_pytest(test_pack):
     EXPECTED = (
-        b"StbtRemoteTest('test-pack/tests/mytest.py', 'test_its_a_test', 2)")
-    env = os.environ.copy()
-    env['PYTHONPATH'] = _find_file('.')
+        b"  StbtRemoteTest('tests/syntax_error.py', 'test_its_a_test', 2)")
 
     output = subprocess.check_output(
         [python, '-m', 'pytest', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
          '--collect-only'],
-        env=env, cwd=_find_file("test-pack"),
         stderr=subprocess.STDOUT)
     print(output)
-    assert EXPECTED in output
+    assert EXPECTED in output.splitlines()
 
 
 def test_run_tests_jenkins(tmpdir, portal_mock):
