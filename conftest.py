@@ -88,6 +88,8 @@ class PortalMock(object):
         self.socket = None
         self.address = None
 
+        self.nodes = ["stb-tester-00044b5af1d3", "stb-tester-00044b5aff8a"]
+
         RESULTS = [{
             "result": "pass",
             "triage_url": ("https://example.stb-tester.com/app/#/result/"
@@ -167,6 +169,10 @@ class PortalMock(object):
         @self.app.route('/api/v2/run_tests', methods=['POST'])
         def _post_run_tests():
             return flask.jsonify(self.on_run_tests(flask.request.json))
+
+        @self.app.route('/api/_private/workgroup')
+        def _get_private_workgroup():
+            return flask.jsonify([{"id": node} for node in self.nodes])
 
         @self.app.route("/shutdown", methods=['POST'])
         def _shutdown():
