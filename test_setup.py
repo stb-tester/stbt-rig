@@ -7,6 +7,9 @@ from conftest import setup_test_pack
 
 
 def test_setup(tmpdir, portal_mock):
+    if (3, 0) <= sys.version_info < (3, 6):
+        raise SkipTest("%s not supported for setup" % sys.version)
+
     import pexpect
 
     setup_test_pack(tmpdir, portal_url=portal_mock.url)
