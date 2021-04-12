@@ -10,6 +10,9 @@ def test_setup(tmpdir, portal_mock):
     if (3, 0) <= sys.version_info < (3, 6):
         from unittest import SkipTest
         raise SkipTest("%s not supported for setup" % sys.version)
+    if platform.system() == "Windows" and sys.version_info < (3, 6):
+        from unittest import SkipTest
+        raise SkipTest("%s not supported for setup" % sys.version)
 
     import pexpect
 
