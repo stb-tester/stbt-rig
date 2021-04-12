@@ -523,7 +523,7 @@ def cmd_setup(args, node_id):
                     o = subprocess.check_output(
                         python + ["-c", "import sys; print(sys.version)"],
                         stdin=open(os.devnull)).strip()
-                    if o.startswith("%s." % python_version):
+                    if o.startswith(to_bytes("%s." % python_version)):
                         break
                 except (subprocess.CalledProcessError, OSError):
                     # Doesn't exist, or there's something wrong with it
