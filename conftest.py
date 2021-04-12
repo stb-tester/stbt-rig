@@ -233,6 +233,19 @@ def portal_mock():
         yield m
 
 
+def main():
+    import time
+
+    with PortalMock() as m, stbt_rig.named_temporary_directory(
+            prefix="stbt-rig-selftest-", ignore_errors=True) as tmpdir:
+        setup_test_pack(tmpdir, m.url)
+        print("Test pack at %s/test-pack\nListening on %s" % (tmpdir, m.url))
+        time.sleep(10000000)
+
+
 def _find_file(path, root=os.path.dirname(os.path.abspath(__file__))):
     return os.path.join(root, path)
 
+
+if __name__ == "__main__":
+    main()
