@@ -57,7 +57,7 @@ def setup_test_pack(tmpdir, portal_url="https://example.stb-tester.com"):
             portal_url = %s
             """ % portal_url))
     with open(tp(".gitignore"), "w") as f:
-        f.write("token")
+        f.write("token\n__pycache__\n")
     with open(tp("moo"), 'w') as f:
         f.write("Hello!\n")
     os.mkdir(tp("tests"))
