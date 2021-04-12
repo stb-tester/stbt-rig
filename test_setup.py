@@ -35,7 +35,7 @@ def test_setup(tmpdir, portal_mock):
         e = pexpect.popen_spawn.PopenSpawn(
             "python stbt_rig.py setup", cwd=test_pack, logfile=stderr)
     e.expect("Enter Access Token for portal %s:" % portal_mock.url,
-             timeout=120)
+             timeout=300)
     e.sendline("this is my token")
 
     e.expect("These nodes are attached to the portal:")
