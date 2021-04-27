@@ -103,6 +103,8 @@ def main_with_args(args):
     try:
         if args.command == "run":
             return cmd_run(args, node)
+        elif args.command == "download":
+            return cmd_download(args, portal)
         elif args.command == "screenshot":
             return cmd_screenshot(args, node)
         elif args.command == "snapshot":
@@ -260,15 +262,15 @@ RUN_ARGS = [
         specified more than once."""),
 
     Arg(("--artifacts"), action="append", dest="artifacts", default=[],
-        metavar="GLOB", help="""Select artifacts to be downloaded.  This is a
-        filename glob.  Set to `*` for all artifacts.  This argument can be
+        metavar="GLOB", help="""Download the specified artifacts. This is a
+        filename glob. Set to "*" for all artifacts. This argument can be
         specified multiple times."""),
 
-    Arg(("--artifacts-dest"), default=None, metavar="PATH", help="""Artifacts
-        will be downloaded to here.  You can include the placeholders
-        {result_id}, {filename} and {basename} here to be filled in
-        automatically by stbt_rig.  Defaults to
-        {result_id}/artifacts/{filename}.  Directories will be created as
+    Arg(("--artifacts-dest"), metavar="PATH",
+        default=os.path.join("{result_id}", "artifacts", "{filename}"),
+        help="""Download the artifacts (specified by --artifacts) to PATH. You
+        can use the placeholders {result_id}, {filename} and {basename}.
+        Defaults to "%(default)s". Directories will be created as
         required."""),
 
     Arg("--junit-xml", action="append", dest="junit_xml", default=[],
@@ -310,6 +312,27 @@ def argparser():
 
     for arg in RUN_ARGS:
         arg.add(run_parser)
+
+    download_parser = subcommands.add_parser(
+        "download", help="Download test-result artifacts",
+        description="""Download artifacts (log files, screenshots, etc) from
+        the specified test-result.""")
+    download_parser.add_argument(
+        "--artifacts", action="append", dest="artifacts", default=[],
+        metavar="GLOB", help="""Download the specified artifacts. This is a
+        filename glob. Defaults to "*" (all artifacts). This argument can be
+        specified multiple times.""")
+    download_parser.add_argument(
+        "--artifacts-dest", metavar="PATH",
+        default=os.path.join("{result_id}", "artifacts", "{filename}"),
+        help="""Download the artifacts (specified by --artifacts) to PATH. You
+        can use the placeholders {result_id}, {filename} and {basename}.
+        Defaults to "%(default)s". Directories will be created as required.""")
+    download_parser.add_argument(
+        "filter", help='''Search filter to identify the desired test-runs,
+        as given to the REST API (/api/v2/results) or the interactive
+        test-results view in the Stb-tester Portal -- see
+        <https://stb-tester.com/manual/user-interface-reference#filter>.''')
 
     screenshot_parser = subcommands.add_parser(
         "screenshot", help="Save a screenshot to disk",
@@ -472,6 +495,12 @@ def cmd_run_body(args, node, j):
             return 0
         else:
             return 1
+
+
+def cmd_download(args, portal):
+    results = portal.get_results(args.filter)
+    for result in results:
+        result.download_artifacts(args.artifacts or ["*"], args.artifacts_dest)
 
 
 def cmd_screenshot(args, node):
@@ -687,12 +716,7 @@ class Result(object):
             self.json = r.json()
         return self.json["artifacts"]
 
-    def download_artifacts(self, patterns=("*",), out_pattern=None):
-        if out_pattern is None:
-            if platform.system() == "Windows":
-                out_pattern = "{result_id}\\artifacts\\{filename}"
-            else:
-                out_pattern = "{result_id}/artifacts/{filename}"
+    def download_artifacts(self, patterns, out_pattern):
         for filename, info in self.list_artifacts().items():
             for p in patterns:
                 if fnmatch.fnmatch(filename, p):
@@ -730,12 +754,12 @@ class Result(object):
         # This way we can avoid downloading the same file twice if we've already
         # downloaded it:
         if info and _file_is_same(outname, info['size'], info['md5']):
-            logger.debug("Not Downloading %s/artifacts/%s to %s - file is "
-                         "unmodified", self.result_id, artifact, outname)
+            logger.info("Not Downloading %s/artifacts/%s to %s - file is "
+                        "unmodified", self.result_id, artifact, outname)
             return
 
-        logger.debug("Downloading %s/artifacts/%s to %s",
-                     self.result_id, artifact, outname)
+        logger.info("Downloading %s/artifacts/%s to %s",
+                    self.result_id, artifact, outname)
         resp = self._portal._get(
             "/api/v2/results%s/artifacts/%s" % (self.result_id, artifact),
             stream=True)
@@ -986,6 +1010,16 @@ class Portal(object):
 
     def notify_push(self):
         self._post("/github/post-receive").raise_for_status()
+
+    def get_result(self, result_id):
+        r = self._get("/api/v2/results/" + result_id)
+        r.raise_for_status()
+        return Result(self, r.json())
+
+    def get_results(self, filter):
+        r = self._get("/api/v2/results", params={"filter": filter})
+        r.raise_for_status()
+        return [Result(self, x) for x in r.json()]
 
     def _get(self, endpoint, timeout=60, **kwargs):
         return self._session.get(self.url(endpoint), timeout=timeout, **kwargs)
