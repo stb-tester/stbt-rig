@@ -329,12 +329,10 @@ def argparser():
         can use the placeholders {result_id}, {filename} and {basename}.
         Defaults to "%(default)s". Directories will be created as required.""")
     download_parser.add_argument(
-        "result_id", help='''Identifier that refers to a test result, as
-        returned from Stb-tester's REST API for running a test
-        (/api/v2/run_tests) or for searching for previous test results
-        (/api/v2/results) -- see <https://stb-tester.com/manual/rest-api-v2>.
-        It looks like "/stb-tester-abcdef123456/0000/123/2020-01-01_13.00.00"
-        ''')
+        "filter", help='''Search filter to identify the desired test-runs,
+        as given to the REST API (/api/v2/results) or the interactive
+        test-results view in the Stb-tester Portal -- see
+        <https://stb-tester.com/manual/user-interface-reference#filter>.''')
 
     screenshot_parser = subcommands.add_parser(
         "screenshot", help="Save a screenshot to disk",
@@ -500,8 +498,9 @@ def cmd_run_body(args, node, j):
 
 
 def cmd_download(args, portal):
-    result = portal.get_result(args.result_id)
-    result.download_artifacts(args.artifacts or ["*"], args.artifacts_dest)
+    results = portal.get_results(args.filter)
+    for result in results:
+        result.download_artifacts(args.artifacts or ["*"], args.artifacts_dest)
 
 
 def cmd_screenshot(args, node):
@@ -1016,6 +1015,11 @@ class Portal(object):
         r = self._get("/api/v2/results/" + result_id)
         r.raise_for_status()
         return Result(self, r.json())
+
+    def get_results(self, filter):
+        r = self._get("/api/v2/results", params={"filter": filter})
+        r.raise_for_status()
+        return [Result(self, x) for x in r.json()]
 
     def _get(self, endpoint, timeout=60, **kwargs):
         return self._session.get(self.url(endpoint), timeout=timeout, **kwargs)
