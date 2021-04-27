@@ -262,16 +262,16 @@ RUN_ARGS = [
         specified more than once."""),
 
     Arg(("--artifacts"), action="append", dest="artifacts", default=[],
-        metavar="GLOB", help="""Select artifacts to be downloaded.  This is a
-        filename glob.  Set to `*` for all artifacts.  This argument can be
+        metavar="GLOB", help="""Download the specified artifacts. This is a
+        filename glob. Set to "*" for all artifacts. This argument can be
         specified multiple times."""),
 
     Arg(("--artifacts-dest"), metavar="PATH",
         default=os.path.join("{result_id}", "artifacts", "{filename}"),
-        help="""Artifacts will be downloaded to here. You can include the
-        placeholders {result_id}, {filename} and {basename} here to be filled
-        in automatically by stbt_rig. Defaults to "%(default)s". Directories
-        will be created as required."""),
+        help="""Download the artifacts (specified by --artifacts) to PATH. You
+        can use the placeholders {result_id}, {filename} and {basename}.
+        Defaults to "%(default)s". Directories will be created as
+        required."""),
 
     Arg("--junit-xml", action="append", dest="junit_xml", default=[],
         help="""Save JUnit style XML file with results to this path.  This is
@@ -319,16 +319,15 @@ def argparser():
         the specified test-result.""")
     download_parser.add_argument(
         "--artifacts", action="append", dest="artifacts", default=[],
-        metavar="GLOB", help="""Select artifacts to be downloaded.  This is a
-        filename glob.  Defaults to `*` (all artifacts).  This argument can be
+        metavar="GLOB", help="""Download the specified artifacts. This is a
+        filename glob. Defaults to "*" (all artifacts). This argument can be
         specified multiple times.""")
     download_parser.add_argument(
         "--artifacts-dest", metavar="PATH",
         default=os.path.join("{result_id}", "artifacts", "{filename}"),
-        help="""Artifacts will be downloaded to here. You can include the
-        placeholders {result_id}, {filename} and {basename} here to be filled
-        in automatically by stbt_rig. Defaults to "%(default)s". Directories
-        will be created as required.""")
+        help="""Download the artifacts (specified by --artifacts) to PATH. You
+        can use the placeholders {result_id}, {filename} and {basename}.
+        Defaults to "%(default)s". Directories will be created as required.""")
     download_parser.add_argument(
         "result_id", help='''Identifier that refers to a test result, as
         returned from Stb-tester's REST API for running a test
