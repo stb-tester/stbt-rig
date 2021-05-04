@@ -316,7 +316,7 @@ def argparser():
     download_parser = subcommands.add_parser(
         "download", help="Download test-result artifacts",
         description="""Download artifacts (log files, screenshots, etc) from
-        the specified test-result.""")
+        previous test-runs.""")
     download_parser.add_argument(
         "--artifacts", action="append", dest="artifacts", default=[],
         metavar="GLOB", help="""Download the specified artifacts. This is a
