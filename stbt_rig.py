@@ -763,7 +763,10 @@ class Result(object):
         resp = self._portal._get(
             "/api/v2/results%s/artifacts/%s" % (self.result_id, artifact),
             stream=True)
-        resp.raise_for_status()
+        if not resp.ok:
+            logger.error("Failed to download %s/artifacts/%s",
+                         self.result_id, artifact)
+            return
         mkdir_p(os.path.dirname(outname))
         with sponge(outname) as f:
             for x in resp.iter_content(chunk_size=None):
