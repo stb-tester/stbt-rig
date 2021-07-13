@@ -514,11 +514,15 @@ def cmd_setup(args, node_id):
         stbt_version = int(config_parser.get("test_pack", "stbt_version"))
         python_version = config_parser.get("test_pack", "python_version")
 
+        if python_version != "3":
+            sys.stderr.write(
+                "Python version %r is not supported by stbt_rig.py setup.  "
+                "Please contact support@stb-tester.com\n" % (python_version,))
+            sys.exit(1)
+
         if not os.path.exists("%s/.venv" % root):
             python = None
-            for python in (["python"],
-                           ["python%s" % python_version],
-                           ["py", "-%s" % python_version]):
+            for python in (["python"], ["python3"], ["py", "-3"]):
                 try:
                     o = subprocess.check_output(
                         python + ["-c", "import sys; print(sys.version)"],
