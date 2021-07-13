@@ -575,7 +575,7 @@ def cmd_setup(args, node_id):
         else:
             os.execv(cmd[0], cmd)
     else:
-        # Install ourselves as a python module in the venv:
+        # Install this stbt_rig as a python module in the venv:
         venv_site_packages = sys.path[-1]
         this_stbt_rig_rel = os.path.relpath(this_stbt_rig, venv_site_packages)
         pkg = os.path.join(venv_site_packages, "stbt_rig.py")
@@ -677,6 +677,7 @@ def _update_vscode_config():
             "--tb=no", "--capture=no",
             "tests"
         ],
+        # This requires the "pucelle.run-on-save" VSCode extension:
         "runOnSave.commands": [
             {
                 "match": ".*\\.py$",
