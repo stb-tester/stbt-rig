@@ -32,9 +32,6 @@ from collections import namedtuple
 from contextlib import contextmanager
 from textwrap import dedent
 
-# Third-party libraries. Keep this list to a minimum to ease deployment.
-import requests
-
 try:
     import configparser
     ConfigParser = configparser.ConfigParser
@@ -48,6 +45,17 @@ try:
     from argcomplete import autocomplete
 except ImportError:
     def autocomplete(*_args):
+        pass
+
+try:
+    from requests.adapters import HTTPAdapter
+    from requests.exceptions import HTTPError
+except ImportError:
+    # Hack: Work around requests not being installed so stbt_rig.py setup still
+    # works
+    class HTTPAdapter(object):
+        pass
+    class HTTPError(Exception):
         pass
 
 
@@ -97,6 +105,10 @@ def resolve_args(args):
 
 
 def main_with_args(args):
+    # Do this before importing requests, we will be installing requests in here:
+    if args.command == "setup":
+        return cmd_setup(args, args.node_id)
+
     portal = Portal.from_args(args)
     node = Node(portal, args.node_id)
 
@@ -110,7 +122,7 @@ def main_with_args(args):
         elif args.command == "snapshot":
             return cmd_snapshot(args, node)
         assert False, "Unreachable: Unknown command %r" % args.command
-    except requests.exceptions.HTTPError as e:
+    except HTTPError as e:
         message = "HTTP %i Error: %s" % (
             e.response.status_code, e.response.text)
         if hasattr(e, "request"):
@@ -349,6 +361,14 @@ def argparser():
         Note that the "run" command automatically does this when in interactive
         mode.""")
 
+    setup_parser = subcommands.add_parser(
+        "setup", help="Setup your venv for development",
+        description="""Creates a Python venv and installs dependencies needed
+        for test-script development.""")
+    setup_parser.add_argument(
+        "--vscode", action="store_true",
+        help="Update VSCode settings.json with recommended settings")
+
     return parser
 
 
@@ -514,6 +534,241 @@ def cmd_snapshot(args, node):
     node.portal.notify_push()
 
 
+def cmd_setup(args, node_id):
+    this_stbt_rig = os.path.abspath(sys.argv[0])
+    root = find_test_pack_root()
+
+    if os.environ.get("STBT_RIG_SECOND_STAGE") != "1":
+        _, config_parser = read_stbt_conf(root)
+        stbt_version = int(config_parser.get("test_pack", "stbt_version"))
+        python_version = config_parser.get("test_pack", "python_version")
+
+        if python_version != "3":
+            sys.stderr.write(
+                "Python version %r is not supported by stbt_rig.py setup.  "
+                "Please contact support@stb-tester.com\n" % (python_version,))
+            sys.exit(1)
+
+        if not os.path.exists("%s/.venv" % root):
+            python = None
+            for python in (["python"], ["python3"], ["py", "-3"]):
+                try:
+                    o = subprocess.check_output(
+                        python + ["-c", "import sys; print(sys.version)"],
+                        stdin=open(os.devnull)).strip()
+                    if o.startswith(to_bytes("%s." % python_version)):
+                        break
+                except (subprocess.CalledProcessError, OSError):
+                    # Doesn't exist, or there's something wrong with it
+                    pass
+            else:
+                die("Can't find python %s in PATH" % python_version)
+
+            # Create venv
+            subprocess.check_call(python + ['-m', 'venv', '.venv'], cwd=root)
+
+        if platform.system() == "Windows":
+            b = "Scripts"
+        else:
+            b = "bin"
+        os.environ["PATH"] = (os.path.join(root, ".venv", b) + os.pathsep +
+                              os.environ.get("PATH", ""))
+        os.environ["VIRTUAL_ENV"] = os.path.join(root, ".venv")
+
+        # Install dependencies
+        pip_deps = [
+            "stb-tester>=%s,<%s" % (stbt_version, stbt_version + 1),
+            "pylint==1.8.3",
+            "astroid==1.6.0",
+            "pytest>=4.6,<4.7",
+            "isort==4.3.4",
+            "keyring",
+            "requests"]
+
+        python = _venv_exe("python", root=root)
+        subprocess.check_call(
+            [python, "-m", "pip", 'install', '--upgrade', 'pip'],
+            cwd=root)
+        subprocess.check_call(
+            [python, "-m", "pip", 'install'] + pip_deps, cwd=root)
+
+        os.environ["STBT_RIG_SECOND_STAGE"] = "1"
+
+        # We re-exec ourselves into the venv now that we've installed all our
+        # dependencies
+        cmd = [python, this_stbt_rig] + sys.argv[1:]
+        if platform.system() == "Windows":
+            # Windows has execv, but the process ends up backgrounded which
+            # breaks interactive use, so subprocess instead.
+            os._exit(subprocess.call(cmd))
+        else:
+            os.execv(cmd[0], cmd)
+    else:
+        # Install this stbt_rig as a python module in the venv:
+        venv_site_packages = sys.path[-1]
+        this_stbt_rig_rel = os.path.relpath(this_stbt_rig, venv_site_packages)
+        pkg = os.path.join(venv_site_packages, "stbt_rig.py")
+        if this_stbt_rig_rel != "stbt_rig.py":
+            if platform.system() == "Windows":
+                shutil.copyfile(this_stbt_rig, pkg)
+            else:
+                try:
+                    os.unlink(pkg)
+                except OSError:
+                    # File doesn't exist
+                    pass
+                os.symlink(this_stbt_rig_rel, pkg)  # pylint: disable=no-member
+
+        os.chdir(root)
+
+        # This will prompt for the auth token and validate connectivity:
+        portal = Portal.from_args(args)
+        portal._get("/api/v2/user")
+
+        for k in "name", "email":
+            try:
+                subprocess.check_output(["git", "config", "user.%s" % k])
+            except subprocess.CalledProcessError as e:
+                if e.returncode == 1:
+                    v = ask("What is your %s (for git commits): " % k)
+                    subprocess.check_output(["git", "config", "user.%s" % k, v])
+                else:
+                    raise
+
+        # Setup .env to include our node-id so we don't need to specify it every
+        # time
+        while not node_id:
+            r = portal._get("/api/_private/workgroup")
+            r.raise_for_status()
+            nodes = [n['id'] for n in r.json()]
+            assert nodes
+            if len(nodes) == 1:
+                node_id = nodes[0]
+            else:
+                sys.stderr.write("These nodes are attached to the portal:\n")
+                for (n, node) in enumerate(nodes, 1):
+                    sys.stderr.write("  %i) %s\n" % (n, node))
+                node_no = ask("Which node do you want to use by default? ")
+                try:
+                    node_idx = int(node_no) - 1
+                    if node_idx < 0:
+                        raise ValueError()
+                    node_id = nodes[node_idx]
+                except (ValueError, IndexError):
+                    sys.stderr.write(
+                        "%r is not a valid number, please enter a value "
+                        "between 1 and %i\n" % (node_no, len(nodes)))
+                    continue
+            if node_id not in nodes:
+                sys.stderr.write(
+                    "%r is not a node attached to this portal.  Try again.\n" %
+                    node_id)
+
+        sys.stderr.write(
+            "Node %s will be used by default.  Edit .env to change\n" % node_id)
+
+        updates = {}
+        updates[b"STBT_NODE_ID"] = node_id.encode("utf-8")
+        _update_env(updates)
+
+        if args.vscode:
+            _update_vscode_config()
+
+
+def _venv_exe(exe, root=None):
+    if root is None:
+        root = ""
+    elif not root.endswith("/"):
+        root += "/"
+    for x in ['%s.venv/bin/%s', '%s.venv/Scripts/%s.exe']:
+        f = x % (root, exe)
+        if os.path.exists(f):
+            return f
+    raise EnvironmentError("No exe %s found in venv" % exe)
+
+
+def _update_vscode_config():
+    import json
+
+    VS_CODE_CONFIG = {
+        "python.linting.pylintEnabled": True,
+        "python.linting.enabled": True,
+        "python.linting.pylintPath": (
+            "${workspaceFolder}/%s" % _venv_exe("pylint")),
+        "python.linting.pylintArgs": ["--load-plugins=stbt.pylint_plugin"],
+        "python.testing.pytestPath": (
+            "${workspaceFolder}/%s" % _venv_exe("pytest")),
+        "python.testing.pytestArgs": [
+            "-p", "stbt_rig",
+            "-p", "no:python",
+            "--override-ini=python_files=*.py",
+            "--override-ini=python_functions=test_*",
+            "--tb=no", "--capture=no",
+            "tests"
+        ],
+        # This requires the "pucelle.run-on-save" VSCode extension:
+        "runOnSave.commands": [
+            {
+                "match": ".*\\.py$",
+                "command":
+                "${workspaceFolder}/.venv/bin/python -m stbt_rig -v snapshot",
+                "runIn": "terminal",
+                "runningStatusMessage": "Running stbt_rig snapshot...",
+                "finishStatusMessage": "Snapshot complete"
+            }
+        ],
+        "python.testing.unittestEnabled": False,
+        "python.testing.nosetestsEnabled": False,
+        "python.testing.pytestEnabled": True,
+        "python.linting.mypyEnabled": False,
+        "python.pythonPath": "${workspaceFolder}/" + _venv_exe("python"),
+        "python.envFile": "${workspaceFolder}/.env"
+    }
+    try:
+        with open(".vscode/settings.json") as f:
+            cfg = json.load(f)
+    except OSError:
+        cfg = {}
+
+    modified = False
+    for k, v in VS_CODE_CONFIG.items():
+        if cfg.get(k) != v:
+            cfg[k] = v
+            modified = True
+
+    if modified:
+        mkdir_p(".vscode")
+        with sponge(".vscode/settings.json") as f:
+            f.write(json.dumps(cfg, indent=4, sort_keys=True).encode("utf-8"))
+
+
+def _update_env(updates):
+    """Used for updating vscode style .env files which have the format:
+
+    KEY=VALUE
+    KEY2=VALUE2
+    """
+    if not updates:
+        return
+    try:
+        with open(".env", "rb") as f:
+            env = f.read()
+    except IOError:
+        env = b""
+
+    with sponge(".env") as f:
+        for l in env.split(b"\n"):
+            try:
+                k, v = l.split(b'=', 1)
+                f.write(b"%s=%s\n" % (k, updates[k]))
+                del updates[k]
+            except (ValueError, KeyError):
+                f.write(l + b"\n")
+                continue
+        for k, v in updates.items():
+            f.write(b"%s=%s\n" % (k, v))
+
+
 def _get_snapshot_branch_name(portal):
     response = portal._get("/api/v2/user")
     response.raise_for_status()
@@ -544,7 +799,7 @@ def find_test_pack_root():
         """(starting at %s)""" % os.getcwd())
 
 
-class PortalAuthTokensAdapter(requests.adapters.HTTPAdapter):
+class PortalAuthTokensAdapter(HTTPAdapter):
     """
     Implements a requests adapter implementing (potentially) interactive auth
     for the given portal.
@@ -856,6 +1111,7 @@ class TestJob(object):
             self._post('/stop', timeout=timeout, retry=True).raise_for_status()
 
     def await_completion(self, timeout=None):
+        import requests
         logger.debug("Awaiting completion of job %s", self.job_uid)
         try:
             response = self._get(
@@ -960,6 +1216,7 @@ class Portal(object):
 
     @staticmethod
     def from_args(args):
+        import requests
         session = requests.Session()
         prefix = args.portal_url
         if not prefix.endswith('/'):
@@ -1167,6 +1424,7 @@ class RetrySession(object):
     def __init__(self, timeout, session=None, interval=1,
                  logger=logging.getLogger('retry_session'),  # pylint: disable=redefined-outer-name
                  _time=None):
+        import requests
         if session is None:
             session = requests.Session()
         if _time is None:
@@ -1189,6 +1447,8 @@ class RetrySession(object):
         return self.request('get', url, params=params, **kwargs)
 
     def request(self, method, url, timeout=None, retry=None, **kwargs):
+        import requests
+
         last_exc_info = (None, None, None)
         if timeout is not None:
             end_time = self._time.time() + timeout
@@ -1211,7 +1471,7 @@ class RetrySession(object):
                 if last_exc_info[0] is not None:
                     raise_(last_exc_info[0], last_exc_info[1], last_exc_info[2])
                 else:
-                    raise RetryTimeout()
+                    raise requests.exceptions.Timeout()
 
             # We have a global timeout: we don't want any single request to
             # take longer than 1/2 of the time remaining to allow for retries.
@@ -1251,10 +1511,6 @@ class RetrySession(object):
                     self._logger.info('Got response %r', e.response.text)
                 last_exc_info = sys.exc_info()
                 self._time.sleep(interval)
-
-
-class RetryTimeout(requests.exceptions.Timeout):
-    pass
 
 
 PYTEST = False
@@ -1339,7 +1595,7 @@ else:
                 self.session.stbt_args.test_cases = ["%s::%s" % (
                     self._filename, self._testname)]
                 cmd_run_body(self.session.stbt_args, self.session.stbt_node, j)
-            except requests.exceptions.HTTPError as e:
+            except HTTPError as e:
                 message = "HTTP %i Error: %s" % (
                     e.response.status_code, e.response.text)
                 if hasattr(e, "request"):
@@ -1430,7 +1686,7 @@ else:
             node = Node(portal, session.config.getvalue("node_id"))
 
             j = cmd_run_prep(args, portal)
-        except requests.exceptions.HTTPError as e:
+        except HTTPError as e:
             message = "HTTP %i Error: %s" % (
                 e.response.status_code, e.response.text)
             if hasattr(e, "request"):
