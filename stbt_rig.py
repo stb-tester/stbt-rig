@@ -699,7 +699,7 @@ def _update_vscode_config():
     VS_CODE_CONFIG = {
         "python.linting.pylintEnabled": True,
         "python.linting.enabled": True,
-        "python.linting.pylintArgs": ["--load-plugins=stbt.pylint_plugin"],
+        "python.linting.pylintArgs": ["--load-plugins=_stbt.pylint_plugin"],
         "python.testing.pytestArgs": [
             "-p", "stbt_rig",
             "-p", "no:python",
