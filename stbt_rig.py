@@ -551,12 +551,18 @@ def cmd_setup(args, node_id):
 
         if not os.path.exists("%s/.venv" % root):
             python = None
-            for python in (["python"], ["python3"], ["py", "-3"]):
+            for python in (["python3.6"], ["py", "-3.6"], ["python"],
+                           ["python3"], ["py", "-3"]):
                 try:
                     o = subprocess.check_output(
                         python + ["-c", "import sys; print(sys.version)"],
                         stdin=open(os.devnull)).strip()
                     if o.startswith(to_bytes("%s." % python_version)):
+                        if not o.startswith(to_bytes("3.6.")):
+                            logger.warning(
+                                "Using Python version %s which may not be "
+                                "fully compatible with stb-tester.  For best "
+                                "compatibilty install Python 3.6", o)
                         break
                 except (subprocess.CalledProcessError, OSError):
                     # Doesn't exist, or there's something wrong with it
