@@ -727,7 +727,6 @@ def _update_vscode_config():
         "python.testing.nosetestsEnabled": False,
         "python.testing.pytestEnabled": True,
         "python.linting.mypyEnabled": False,
-        "python.pythonPath": "${workspaceFolder}/" + _venv_exe("python"),
         "python.envFile": "${workspaceFolder}/.env"
     }
     try:
