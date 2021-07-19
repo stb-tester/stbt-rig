@@ -715,7 +715,7 @@ def _update_vscode_config():
                 "command":
                 "${workspaceFolder}/%s -m stbt_rig -v snapshot" % _venv_exe(
                     "python"),
-                "runIn": "terminal",
+                "runIn": "backend",
                 "runningStatusMessage": "Running stbt_rig snapshot...",
                 "finishStatusMessage": "Snapshot complete"
             }
