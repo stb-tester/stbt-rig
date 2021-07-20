@@ -551,12 +551,18 @@ def cmd_setup(args, node_id):
 
         if not os.path.exists("%s/.venv" % root):
             python = None
-            for python in (["python"], ["python3"], ["py", "-3"]):
+            for python in (["python3.6"], ["py", "-3.6"], ["python"],
+                           ["python3"], ["py", "-3"]):
                 try:
                     o = subprocess.check_output(
                         python + ["-c", "import sys; print(sys.version)"],
                         stdin=open(os.devnull)).strip()
                     if o.startswith(to_bytes("%s." % python_version)):
+                        if not o.startswith(to_bytes("3.6.")):
+                            logger.warning(
+                                "Using Python version %s which may not be "
+                                "fully compatible with stb-tester.  For best "
+                                "compatibilty install Python 3.6", o)
                         break
                 except (subprocess.CalledProcessError, OSError):
                     # Doesn't exist, or there's something wrong with it
@@ -693,11 +699,7 @@ def _update_vscode_config():
     VS_CODE_CONFIG = {
         "python.linting.pylintEnabled": True,
         "python.linting.enabled": True,
-        "python.linting.pylintPath": (
-            "${workspaceFolder}/%s" % _venv_exe("pylint")),
-        "python.linting.pylintArgs": ["--load-plugins=stbt.pylint_plugin"],
-        "python.testing.pytestPath": (
-            "${workspaceFolder}/%s" % _venv_exe("pytest")),
+        "python.linting.pylintArgs": ["--load-plugins=_stbt.pylint_plugin"],
         "python.testing.pytestArgs": [
             "-p", "stbt_rig",
             "-p", "no:python",
@@ -711,8 +713,9 @@ def _update_vscode_config():
             {
                 "match": ".*\\.py$",
                 "command":
-                "${workspaceFolder}/.venv/bin/python -m stbt_rig -v snapshot",
-                "runIn": "terminal",
+                "${workspaceFolder}/%s -m stbt_rig -v snapshot" % _venv_exe(
+                    "python"),
+                "runIn": "backend",
                 "runningStatusMessage": "Running stbt_rig snapshot...",
                 "finishStatusMessage": "Snapshot complete"
             }
@@ -721,7 +724,6 @@ def _update_vscode_config():
         "python.testing.nosetestsEnabled": False,
         "python.testing.pytestEnabled": True,
         "python.linting.mypyEnabled": False,
-        "python.pythonPath": "${workspaceFolder}/" + _venv_exe("python"),
         "python.envFile": "${workspaceFolder}/.env"
     }
     try:
