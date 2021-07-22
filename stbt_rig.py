@@ -591,6 +591,11 @@ def cmd_setup(args, node_id):
             "keyring",
             "requests"]
 
+        if stbt_version == 32:
+            # Contains pylint fixes on Windows.  This ensures that
+            # existing .venvs are upgraded:
+            pip_deps.append("stbt_core>=32.0.4")
+
         python = _venv_exe("python", root=root)
         subprocess.check_call(
             [python, "-m", "pip", 'install', '--upgrade', 'pip'],
