@@ -112,6 +112,10 @@ def test_run_tests_interactive(capsys, test_pack, tmpdir, portal_mock):
     assert 0 == stbt_rig.main([
         'stbt_rig.py', '--node-id=mynode', '--portal-url=%s' % portal_mock.url,
         '--portal-auth-file=../token', 'run', 'test.py::test_my_tests'])
+    assert re.match(
+        r"stbt-rig/%s \(Python [23]\.\d+\.\d+; (Linux|Windows|Darwin); mode:interactive\)" % stbt_rig_sha(),
+        portal_mock.last_user_agent)
+
 
 
 def test_run_tests_download_artifacts(test_pack, tmpdir, portal_mock):
@@ -178,6 +182,14 @@ def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
         python, '-m', 'pytest', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
         '--portal-url=%s' % portal_mock.url, '--portal-auth-file=../token',
         '--node-id=mynode', 'test.py::test_my_tests'], env=env)
+    assert re.match(
+        r"stbt-rig/%s \(Python [23]\.\d+\.\d+; (Linux|Windows|Darwin); mode:pytest\)" % stbt_rig_sha(),
+        portal_mock.last_user_agent)
+
+
+def stbt_rig_sha():
+    return to_native_str(subprocess.check_output(
+        ["git", "hash-object", _find_file("stbt_rig.py")]).strip()[:7])
 
 
 def test_run_tests_pytest_unauthorised(test_pack, tmpdir, portal_mock):

@@ -828,6 +828,7 @@ class PortalAuthTokensAdapter(HTTPAdapter):
     def send(self, request, stream=False, timeout=None, verify=True, cert=None,
              proxies=None):
         while True:
+            request.headers['User-Agent'] = user_agent(self.mode)
             request.headers['Authorization'] = "token " + self._auth_token
             response = super(PortalAuthTokensAdapter, self).send(
                 request, stream, timeout, verify, cert, proxies)
@@ -1213,11 +1214,37 @@ class Node(object):
             "/api/v2/nodes/%s/%s" % (self.node_id, suffix), **kwargs)
 
 
+_USER_AGENT = None
+
+
+def user_agent(mode):
+    global _USER_AGENT  # pylint: disable=global-statement
+    if not _USER_AGENT:
+        with open(__file__.rstrip('c'), "rb") as f:
+            my_src = f.read()
+        my_src = my_src.replace(b"\r\n", b"\n")
+        s = hashlib.sha1(b"blob %i\0" % len(my_src))
+        s.update(my_src)
+        git_blob_sha = s.hexdigest()[:7]
+
+        if "VSCODE_PID" in os.environ:
+            ide = "; ide:vscode"
+        elif "PYCHARM_HOSTED" in os.environ:
+            ide = "; ide:pycharm"
+        else:
+            ide = ""
+
+        _USER_AGENT = (
+            "stbt-rig/%s (Python %s; %s; mode:%s%s)" % (
+                git_blob_sha, platform.python_version(),
+                platform.system(), mode, ide))
+    return _USER_AGENT
+
+
 class Portal(object):
     def __init__(self, url, session, readonly=False):
         self._url = url
         self.readonly = readonly
-        session.headers["User-Agent"] = "stbt-rig"
         self._session = RetrySession(
             timeout=1e9, session=session, logger=logger)
 
