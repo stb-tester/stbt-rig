@@ -3,15 +3,23 @@ from __future__ import absolute_import, division, print_function
 import glob
 import os
 import platform
+import random
 import re
+import threading
 import time
 from contextlib import contextmanager
 from sys import executable as python
 from textwrap import dedent
 
 import stbt_rig
-from stbt_rig import to_native_str, to_unicode
+from stbt_rig import (
+    file_lock, named_temporary_directory, to_native_str, to_unicode)
 from conftest import (subprocess, PortalMock)
+
+try:
+    from queue import Queue
+except ImportError:
+    from Queue import Queue
 
 
 def test_testpack_snapshot_no_change_if_no_commits(test_pack):
@@ -258,6 +266,27 @@ def run_tests_ci(portal_mock, env):
          "run", "tests/test.py::test_my_tests"],
         env=env, timeout=10)
     assert open("stbt-results.xml").read() == PortalMock.RESULTS_XML
+
+
+def test_file_lock():
+    with named_temporary_directory() as d:
+        q = Queue()
+
+        def proc():
+            n = random.randint(0, 2**31)
+            with open("%s/lockfile" % d, "w") as f:
+                with file_lock(f.fileno()):
+                    q.put(n)
+                    time.sleep(0.2)
+                    q.put(n)
+
+        for x in range(9):
+            threading.Thread(target=proc).start()
+        proc()
+
+        for x in range(10):
+            # Without locking the numbers would be all jumbled up
+            assert q.get() == q.get()
 
 
 def _find_file(path, root=os.path.dirname(os.path.abspath(__file__))):

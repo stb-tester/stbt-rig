@@ -1436,18 +1436,43 @@ class TestPack(object):
             return commit_sha, commit_sha
 
     def push_git_snapshot(self, branch, interactive=True):
-        commit_sha, run_sha = self.take_snapshot()
-        options = ['--force']
-        if not logger.isEnabledFor(logging.DEBUG):
-            options.append('--quiet')
-        logger.info("Pushing git snapshot %s to %s:%s",
-                    commit_sha[:7], self.remote, branch)
-        self._git(
-            ['push'] + options +
-            [self.remote,
-             '%s:%s' % (commit_sha, branch)],
-            interactive=interactive)
-        return run_sha
+        # We don't want to be doing more than one snapshot concurrently
+        # otherwise github can error with "rejected", so use file locking:
+        lockfilename = self._git(
+            ["rev-parse", "--git-path", "stbt-rig-snapshot.lock"]).strip()
+        with open(lockfilename, "w") as lock, file_lock(lock.fileno()):
+            commit_sha, run_sha = self.take_snapshot()
+            options = ['--force']
+            if not logger.isEnabledFor(logging.DEBUG):
+                options.append('--quiet')
+            logger.info("Pushing git snapshot %s to %s:%s",
+                        commit_sha[:7], self.remote, branch)
+            self._git(
+                ['push'] + options +
+                [self.remote,
+                 '%s:%s' % (commit_sha, branch)],
+                interactive=interactive)
+            return run_sha
+
+
+if platform.system() == "Windows":
+    @contextmanager
+    def file_lock(fileno):
+        import msvcrt  # pylint: disable=import-error
+        msvcrt.locking(fileno, msvcrt.LK_LOCK, 1)
+        try:
+            yield
+        finally:
+            msvcrt.locking(fileno, msvcrt.LK_UNLCK, 1)
+else:
+    @contextmanager
+    def file_lock(fileno):
+        import fcntl
+        fcntl.flock(fileno, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fileno, fcntl.LOCK_UN)
 
 
 class RetrySession(object):
