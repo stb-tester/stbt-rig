@@ -3,15 +3,23 @@ from __future__ import absolute_import, division, print_function
 import glob
 import os
 import platform
+import random
 import re
+import threading
 import time
 from contextlib import contextmanager
 from sys import executable as python
 from textwrap import dedent
 
 import stbt_rig
-from stbt_rig import to_native_str, to_unicode
+from stbt_rig import (
+    file_lock, named_temporary_directory, to_native_str, to_unicode)
 from conftest import (subprocess, PortalMock)
+
+try:
+    from queue import Queue
+except ImportError:
+    from Queue import Queue
 
 
 def test_testpack_snapshot_no_change_if_no_commits(test_pack):
@@ -112,6 +120,10 @@ def test_run_tests_interactive(capsys, test_pack, tmpdir, portal_mock):
     assert 0 == stbt_rig.main([
         'stbt_rig.py', '--node-id=mynode', '--portal-url=%s' % portal_mock.url,
         '--portal-auth-file=../token', 'run', 'test.py::test_my_tests'])
+    assert re.match(
+        r"stbt-rig/%s \(Python [23]\.\d+\.\d+; (Linux|Windows|Darwin); mode:interactive\)" % stbt_rig_sha(),
+        portal_mock.last_user_agent)
+
 
 
 def test_run_tests_download_artifacts(test_pack, tmpdir, portal_mock):
@@ -178,6 +190,14 @@ def test_run_tests_pytest(test_pack, tmpdir, portal_mock):
         python, '-m', 'pytest', '-vv', '-p', 'stbt_rig', '-p', 'no:python',
         '--portal-url=%s' % portal_mock.url, '--portal-auth-file=../token',
         '--node-id=mynode', 'test.py::test_my_tests'], env=env)
+    assert re.match(
+        r"stbt-rig/%s \(Python [23]\.\d+\.\d+; (Linux|Windows|Darwin); mode:pytest\)" % stbt_rig_sha(),
+        portal_mock.last_user_agent)
+
+
+def stbt_rig_sha():
+    return to_native_str(subprocess.check_output(
+        ["git", "hash-object", _find_file("stbt_rig.py")]).strip()[:7])
 
 
 def test_run_tests_pytest_unauthorised(test_pack, tmpdir, portal_mock):
@@ -246,6 +266,27 @@ def run_tests_ci(portal_mock, env):
          "run", "tests/test.py::test_my_tests"],
         env=env, timeout=10)
     assert open("stbt-results.xml").read() == PortalMock.RESULTS_XML
+
+
+def test_file_lock():
+    with named_temporary_directory() as d:
+        q = Queue()
+
+        def proc():
+            n = random.randint(0, 2**31)
+            with open("%s/lockfile" % d, "w") as f:
+                with file_lock(f.fileno()):
+                    q.put(n)
+                    time.sleep(0.2)
+                    q.put(n)
+
+        for x in range(9):
+            threading.Thread(target=proc).start()
+        proc()
+
+        for x in range(10):
+            # Without locking the numbers would be all jumbled up
+            assert q.get() == q.get()
 
 
 def _find_file(path, root=os.path.dirname(os.path.abspath(__file__))):

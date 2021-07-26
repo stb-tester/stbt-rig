@@ -87,6 +87,7 @@ class PortalMock(object):
         self.thread = None
         self.socket = None
         self.address = None
+        self.last_user_agent = None
 
         self.nodes = ["stb-tester-00044b5af1d3", "stb-tester-00044b5aff8a"]
 
@@ -117,8 +118,9 @@ class PortalMock(object):
             if (flask.request.headers.get('Authorization') !=
                     "token this is my token"):
                 return ("Forbidden", 403)
-            else:
-                return None
+
+            self.last_user_agent = flask.request.headers.get('User-Agent')
+            return None
 
         @self.app.route("/ready")
         def _ready():

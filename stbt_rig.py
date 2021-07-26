@@ -591,6 +591,11 @@ def cmd_setup(args, node_id):
             "keyring",
             "requests"]
 
+        if stbt_version == 32:
+            # Contains pylint fixes on Windows.  This ensures that
+            # existing .venvs are upgraded:
+            pip_deps.append("stbt_core>=32.0.4")
+
         python = _venv_exe("python", root=root)
         subprocess.check_call(
             [python, "-m", "pip", 'install', '--upgrade', 'pip'],
@@ -823,6 +828,7 @@ class PortalAuthTokensAdapter(HTTPAdapter):
     def send(self, request, stream=False, timeout=None, verify=True, cert=None,
              proxies=None):
         while True:
+            request.headers['User-Agent'] = user_agent(self.mode)
             request.headers['Authorization'] = "token " + self._auth_token
             response = super(PortalAuthTokensAdapter, self).send(
                 request, stream, timeout, verify, cert, proxies)
@@ -1208,11 +1214,37 @@ class Node(object):
             "/api/v2/nodes/%s/%s" % (self.node_id, suffix), **kwargs)
 
 
+_USER_AGENT = None
+
+
+def user_agent(mode):
+    global _USER_AGENT  # pylint: disable=global-statement
+    if not _USER_AGENT:
+        with open(__file__.rstrip('c'), "rb") as f:
+            my_src = f.read()
+        my_src = my_src.replace(b"\r\n", b"\n")
+        s = hashlib.sha1(b"blob %i\0" % len(my_src))
+        s.update(my_src)
+        git_blob_sha = s.hexdigest()[:7]
+
+        if "VSCODE_PID" in os.environ:
+            ide = "; ide:vscode"
+        elif "PYCHARM_HOSTED" in os.environ:
+            ide = "; ide:pycharm"
+        else:
+            ide = ""
+
+        _USER_AGENT = (
+            "stbt-rig/%s (Python %s; %s; mode:%s%s)" % (
+                git_blob_sha, platform.python_version(),
+                platform.system(), mode, ide))
+    return _USER_AGENT
+
+
 class Portal(object):
     def __init__(self, url, session, readonly=False):
         self._url = url
         self.readonly = readonly
-        session.headers["User-Agent"] = "stbt-rig"
         self._session = RetrySession(
             timeout=1e9, session=session, logger=logger)
 
@@ -1404,18 +1436,43 @@ class TestPack(object):
             return commit_sha, commit_sha
 
     def push_git_snapshot(self, branch, interactive=True):
-        commit_sha, run_sha = self.take_snapshot()
-        options = ['--force']
-        if not logger.isEnabledFor(logging.DEBUG):
-            options.append('--quiet')
-        logger.info("Pushing git snapshot %s to %s:%s",
-                    commit_sha[:7], self.remote, branch)
-        self._git(
-            ['push'] + options +
-            [self.remote,
-             '%s:%s' % (commit_sha, branch)],
-            interactive=interactive)
-        return run_sha
+        # We don't want to be doing more than one snapshot concurrently
+        # otherwise github can error with "rejected", so use file locking:
+        lockfilename = self._git(
+            ["rev-parse", "--git-path", "stbt-rig-snapshot.lock"]).strip()
+        with open(lockfilename, "w") as lock, file_lock(lock.fileno()):
+            commit_sha, run_sha = self.take_snapshot()
+            options = ['--force']
+            if not logger.isEnabledFor(logging.DEBUG):
+                options.append('--quiet')
+            logger.info("Pushing git snapshot %s to %s:%s",
+                        commit_sha[:7], self.remote, branch)
+            self._git(
+                ['push'] + options +
+                [self.remote,
+                 '%s:%s' % (commit_sha, branch)],
+                interactive=interactive)
+            return run_sha
+
+
+if platform.system() == "Windows":
+    @contextmanager
+    def file_lock(fileno):
+        import msvcrt  # pylint: disable=import-error
+        msvcrt.locking(fileno, msvcrt.LK_LOCK, 1)
+        try:
+            yield
+        finally:
+            msvcrt.locking(fileno, msvcrt.LK_UNLCK, 1)
+else:
+    @contextmanager
+    def file_lock(fileno):
+        import fcntl
+        fcntl.flock(fileno, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fileno, fcntl.LOCK_UN)
 
 
 class RetrySession(object):
