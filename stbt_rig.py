@@ -164,7 +164,7 @@ def _list_node_ids(**_kwargs):
     """Used for command-line tab-completion.
 
     For lack of a better place too look, looks for configuration files in
-    config/test-farm -- see https://stb-tester.com/manual/advanced-configuration#node-specific-configuration-files
+    config/test-farm -- see https://stb-tester.com/manual/configuration#node-specific-configuration-files
     """
 
     return [f[17:-5]
