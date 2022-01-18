@@ -206,8 +206,8 @@ ARGS = [
     # Can't pass auth token on command line because it would be visible in
     # /proc. Pass it in a file instead.
     Arg("--portal-auth-file", metavar="FILENAME",
-        help="""File containing the HTTP REST API access token. See the
-        AUTHENTICATION section below."""),
+        help="""File containing the HTTP REST API access token. See
+        <https://stb-tester.com/manual/stbt-rig#authentication>."""),
 
     Arg("--node-id", metavar="stb-tester-abcdef123456",
         help="""Which Stb-tester node to execute the COMMAND on. The node ID is
@@ -225,9 +225,9 @@ ARGS = [
 
     Arg("--mode", choices=["auto", "bamboo", "interactive", "jenkins"],
         default="auto",
-        help="""See the sections INTERACTIVE MODE and JENKINS INTEGRATION
-        below. This defaults to "auto", which detects whether or not it is
-        being run inside Jenkins or Bamboo.""", cmdline_only=True),
+        help="""See <https://stb-tester.com/manual/stbt-rig#interactive-mode>.
+        This defaults to "auto", which detects whether or not it is being run
+        inside Jenkins or Bamboo.""", cmdline_only=True),
 
     Arg("--csv", metavar="FILENAME",
         help="Also write test-results in CSV format to the specified file."),
