@@ -4,7 +4,7 @@ Command-line tool for interacting with the Stb-tester Portal's [REST API].
 
 [REST API]: https://stb-tester.com/manual/rest-api-v2
 
-<a href="https://github.com/stb-tester/stbt-rig/actions?query=branch%3Amaster">
+<a href="https://github.com/stb-tester/stbt-rig/actions?query=branch%3Amain">
  <img src="https://github.com/stb-tester/stbt-rig/actions/workflows/lint.yml/badge.svg">
  <img src="https://github.com/stb-tester/stbt-rig/actions/workflows/pytest.yml/badge.svg">
 </a>
