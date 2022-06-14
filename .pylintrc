@@ -8,10 +8,12 @@ reports=no
 
 [MESSAGES CONTROL]
 disable=
+  import-outside-toplevel,
   invalid-name,
   locally-disabled,
   locally-enabled,
   missing-docstring,
+  no-else-raise,
   no-else-return,
   protected-access,
   redefined-builtin,

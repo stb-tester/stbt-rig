@@ -43,7 +43,7 @@ try:
 except ImportError:
     # Hack: Work around requests not being installed so stbt_rig.py setup still
     # works
-    class HTTPAdapter(object):
+    class HTTPAdapter:
         pass
     class HTTPError(Exception):
         pass
@@ -945,7 +945,7 @@ class TestError(Exception):
         self.traceback = traceback
 
 
-class Result(object):
+class Result:
     def __init__(self, portal, result_json):
         self._portal = portal
         self.json = result_json
@@ -1087,7 +1087,7 @@ def _file_is_same(filename, size, md5sum):
         return False
 
 
-class TestJob(object):
+class TestJob:
     RUNNING = "running"
     EXITED = "exited"
 
@@ -1170,7 +1170,7 @@ class TimeoutException(RuntimeError):
     pass
 
 
-class Node(object):
+class Node:
     def __init__(self, portal, node_id):
         self.portal = portal
         self.node_id = node_id
@@ -1237,7 +1237,7 @@ def user_agent(mode):
     return _USER_AGENT
 
 
-class Portal(object):
+class Portal:
     def __init__(self, url, session, readonly=False):
         self._url = url
         self.readonly = readonly
@@ -1334,7 +1334,7 @@ class NodeBusyException(Exception):
     pass
 
 
-class TestPack(object):
+class TestPack:
     def __init__(self, root=None, remote="origin"):
         if root is None:
             root = find_test_pack_root()
@@ -1467,7 +1467,7 @@ else:
             fcntl.flock(fileno, fcntl.LOCK_UN)
 
 
-class RetrySession(object):
+class RetrySession:
     """
     Emulates a requests session but with retry and timeout logic for a sequence
     of HTTP requests.
@@ -1701,7 +1701,7 @@ else:
         return out
 
 
-    class Args(object):
+    class Args:
         """Pretends to be the result of calling `argparser` `parse_args` so we
         can reuse code from stbt_rig for filling in the details"""
         def __init__(self, config):
