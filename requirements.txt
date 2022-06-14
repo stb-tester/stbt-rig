@@ -11,5 +11,4 @@ pylint==1.8.3
 astroid==1.6.0
 flask
 isort==4.3.4
-subprocess32==3.5.4 ; python_version=='2.7'
 werkzeug

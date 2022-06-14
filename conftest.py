@@ -1,18 +1,13 @@
 import os
 import random
 import shutil
+import subprocess
 import threading
 from textwrap import dedent
 
 import pytest
 
 import stbt_rig
-
-try:
-    # Needed for timeout argument to wait on Python 2.7
-    import subprocess32 as subprocess
-except ImportError:
-    import subprocess
 
 
 @pytest.fixture(scope="function", name="tmpdir")

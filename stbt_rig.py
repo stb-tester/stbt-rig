@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
 """Command-line tool for interacting with the Stb-tester Portal's REST API.
@@ -10,10 +10,8 @@ Copyright 2017-2020 Stb-tester.com Ltd. <support@stb-tester.com>
 Released under the MIT license.
 """
 
-from __future__ import (
-    absolute_import, division, print_function, unicode_literals)
-
 import argparse
+import configparser
 import errno
 import fnmatch
 import hashlib
@@ -31,14 +29,6 @@ import time
 from collections import namedtuple
 from contextlib import contextmanager
 from textwrap import dedent
-
-try:
-    import configparser
-    ConfigParser = configparser.ConfigParser
-except ImportError:
-    # Python 2
-    import ConfigParser as configparser
-    ConfigParser = configparser.SafeConfigParser
 
 try:
     # Bash tab-completion, if python-argcomplete is installed
@@ -554,11 +544,11 @@ def cmd_setup(args, node_id):
             for python in (["python3.6"], ["py", "-3.6"], ["python"],
                            ["python3"], ["py", "-3"]):
                 try:
-                    o = subprocess.check_output(
+                    o = to_unicode(subprocess.check_output(
                         python + ["-c", "import sys; print(sys.version)"],
-                        stdin=open(os.devnull)).strip()
-                    if o.startswith(to_bytes("%s." % python_version)):
-                        if not o.startswith(to_bytes("3.6.")):
+                        stdin=open(os.devnull))).strip()
+                    if o.startswith("%s." % python_version):
+                        if not o.startswith("3.6."):
                             logger.warning(
                                 "Using Python version %s which may not be "
                                 "fully compatible with stb-tester.  For best "
@@ -646,7 +636,7 @@ def cmd_setup(args, node_id):
                 subprocess.check_output(["git", "config", "user.%s" % k])
             except subprocess.CalledProcessError as e:
                 if e.returncode == 1:
-                    v = ask("What is your %s (for git commits): " % k)
+                    v = input("What is your %s (for git commits): " % k)
                     subprocess.check_output(["git", "config", "user.%s" % k, v])
                 else:
                     raise
@@ -664,7 +654,7 @@ def cmd_setup(args, node_id):
                 sys.stderr.write("These nodes are attached to the portal:\n")
                 for (n, node) in enumerate(nodes, 1):
                     sys.stderr.write("  %i) %s\n" % (n, node))
-                node_no = ask("Which node do you want to use by default? ")
+                node_no = input("Which node do you want to use by default? ")
                 try:
                     node_idx = int(node_no) - 1
                     if node_idx < 0:
@@ -892,7 +882,8 @@ class PortalAuthTokensAdapter(HTTPAdapter):
                 "enter your API token every time\n")
 
         while True:
-            token = ask('Enter Access Token for portal %s: ' % self.portal_url)
+            token = input('Enter Access Token for portal %s: '
+                          % self.portal_url)
             if not token:
                 # EOF
                 sys.stderr.write("EOF!\n")
@@ -915,7 +906,7 @@ def read_stbt_conf(root):
     traverse them for the purposes of loading .stbt.conf.
     """
     root = os.path.abspath(root)
-    cp = ConfigParser()
+    cp = configparser.ConfigParser()
     filename = os.path.join(root, '.stbt.conf')
     for _ in range(10):
         try:
@@ -1000,7 +991,7 @@ class Result(object):
             }
 
             for k, v in self.json.items():
-                if isinstance(v, unicode):
+                if isinstance(v, str):
                     # Strip the leading '/' from result_id so we don't write
                     # files to root
                     v = v.strip('/')
@@ -1360,10 +1351,6 @@ class TestPack(object):
                 kwargs["stdin"] = open(os.devnull, "r")
             env['GIT_TERMINAL_PROMPT'] = b'0'
 
-        # On Windows environment variables must be bytes on 2.7 and unicode on
-        # 3.0+
-        env = {to_native_str(k): to_native_str(v) for k, v in env.items()}
-
         logger.debug('+git %s', " ".join(cmd))
 
         return to_unicode(
@@ -1533,7 +1520,7 @@ class RetrySession(object):
                     "Timed out making request %s %s", method, url,
                     exc_info=last_exc_info)
                 if last_exc_info[0] is not None:
-                    raise_(last_exc_info[0], last_exc_info[1], last_exc_info[2])
+                    raise last_exc_info[1].with_traceback(last_exc_info[2])
                 else:
                     raise requests.exceptions.Timeout()
 
@@ -1827,52 +1814,11 @@ def die(message, *args):
         sys.exit(1)
 
 
-def to_bytes(text):
-    if isinstance(text, bytes):
-        return text
-    else:
-        return text.encode("utf-8", errors="backslashreplace")
-
-
 def to_unicode(text):
     if isinstance(text, bytes):
         return text.decode("utf-8", errors="replace")
     else:
         return text
-
-
-def to_native_str(text):
-    if sys.version_info.major == 2:
-        return to_bytes(text)
-    else:
-        return to_unicode(text)
-
-
-# Python 2 & 3 compatible way of raising an exception with traceback.
-# Copied from python-future so that we don't have to add a dependency.
-if sys.version_info.major == 3:
-    def raise_(tp, value, tb):  # pylint:disable=unused-argument
-        """
-        A function that matches the Python 2.x ``raise`` statement. This
-        allows re-raising exceptions with the cls value and traceback on
-        Python 2 and 3.
-        """
-        exc = value
-        if exc.__traceback__ is not tb:
-            raise exc.with_traceback(tb)
-        raise exc
-
-    unicode = str
-    ask = input
-else:
-    # `raise a, b, c` is a syntax error on Python 3 (even though we don't run
-    # this block with Python 3, Python still has to parse it). Hence `exec`.
-    exec(  # pylint:disable=exec-used
-        dedent('''\
-        def raise_(tp, value=None, tb=None):
-            raise tp, value, tb
-        '''))
-    ask = raw_input  # pylint: disable=undefined-variable
 
 
 if __name__ == '__main__':
