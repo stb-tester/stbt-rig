@@ -84,8 +84,6 @@ class PortalMock(object):
         import flask
         self.app = flask.Flask(__name__)
         self.expectations = []
-        self.thread = None
-        self.socket = None
         self.address = None
         self.last_user_agent = None
 
@@ -176,14 +174,6 @@ class PortalMock(object):
         def _get_private_workgroup():
             return flask.jsonify([{"id": node} for node in self.nodes])
 
-        @self.app.route("/shutdown", methods=['POST'])
-        def _shutdown():
-            func = flask.request.environ.get('werkzeug.server.shutdown')
-            if func is None:
-                raise RuntimeError('Not running with the Werkzeug Server')
-            func()
-            return ""
-
     def __enter__(self):
         from werkzeug.serving import make_server
         from werkzeug.debug import DebuggedApplication
@@ -191,20 +181,13 @@ class PortalMock(object):
         server = make_server('localhost', 0, DebuggedApplication(self.app))
         self.address = server.socket.getsockname()
 
-        self.thread = threading.Thread(target=server.serve_forever)
-        self.thread.daemon = True
-        self.thread.start()
+        thread = threading.Thread(target=server.serve_forever)
+        thread.daemon = True
+        thread.start()
 
         return self
 
     def __exit__(self, *_):
-        import requests
-        requests.post("%s/shutdown" % self.url,
-                      headers={'Authorization': "token this is my token"})
-        self.thread.join()
-        self.thread = None
-        self.socket = None
-
         assert not self.expectations
 
     @property
