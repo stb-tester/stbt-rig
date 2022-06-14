@@ -43,6 +43,8 @@ def setup_test_pack(tmpdir, portal_url="https://example.stb-tester.com"):
     subprocess.check_call(['git', 'init', '--bare'], cwd=u)
 
     subprocess.check_call(['git', 'clone', 'upstream', 'test-pack'], cwd=tmpdir)
+    subprocess.check_call(['git', 'symbolic-ref', 'HEAD', 'refs/heads/main'],
+                          cwd=tp())
 
     subprocess.check_call(
         ['git', 'config', 'user.email', 'stbt-rig@stb-tester.com'], cwd=tp())
@@ -76,7 +78,7 @@ def setup_test_pack(tmpdir, portal_url="https://example.stb-tester.com"):
          'tests/syntax_error.py', 'tests/test.py'], cwd=tp())
     subprocess.check_call(['git', 'commit', '-m', 'Test'], cwd=tp())
     subprocess.check_call(
-        ['git', 'push', '-u', 'origin', 'master:mybranch'], cwd=tp())
+        ['git', 'push', '-u', 'origin', 'main:mybranch'], cwd=tp())
 
 
 class PortalMock(object):
