@@ -246,7 +246,8 @@ RUN_ARGS = [
         the test-pack repository identifying the version of the tests to run.
         Can also be the name of a git branch or tag. In interactive mode this
         defaults to a snapshot of your current working directory. In jenkins
-        mode this defaults to "master"."""),
+        mode this defaults to the test-pack repository's default branch
+        (typically "main")."""),
 
     Arg("--remote-control", metavar="NAME", help="""The remote control infrared
         configuration to use when running the tests. This should match the name
@@ -403,8 +404,8 @@ def cmd_run_prep(args, portal):
                          .push_git_snapshot(branch_name, interactive=False)
         elif args.mode in ["bamboo", "jenkins"]:
             # We assume that when in CI we're not in the git repo of the
-            # test-pack, so run tests from master.
-            commit_sha = "master"
+            # test-pack, so run tests from main.
+            commit_sha = "HEAD"
         else:
             assert False, "Unreachable: Unknown mode %r" % args.mode
 
