@@ -588,7 +588,9 @@ def cmd_setup(args, node_id):
             "pytest>=4.6,<4.7",
             "isort==4.3.4",
             "keyring",
-            "requests"]
+            "requests",
+            "tzlocal",
+        ]
 
         if stbt_version == 32:
             # Contains pylint fixes on Windows and Intellisense fixes.  This
