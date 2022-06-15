@@ -550,20 +550,27 @@ def cmd_setup(args, node_id):
                 "Please contact support@stb-tester.com\n" % (python_version,))
             sys.exit(1)
 
+        if stbt_version >= 33:
+            v = "3.10"
+        else:
+            v = "3.6"
+        python_executable_names = (["python%s" % v], ["py", "-%s" % v],
+                                   ["python"], ["python3"], ["py", "-3"])
+
         if not os.path.exists("%s/.venv" % root):
             python = None
-            for python in (["python3.6"], ["py", "-3.6"], ["python"],
-                           ["python3"], ["py", "-3"]):
+            for python in python_executable_names:
                 try:
-                    o = subprocess.check_output(
+                    o = to_unicode(subprocess.check_output(
                         python + ["-c", "import sys; print(sys.version)"],
-                        stdin=open(os.devnull)).strip()
-                    if o.startswith(to_bytes("%s." % python_version)):
-                        if not o.startswith(to_bytes("3.6.")):
+                        stdin=open(os.devnull))).strip()
+                    if o.startswith("3."):
+                        if not o.startswith(v + "."):
                             logger.warning(
                                 "Using Python version %s which may not be "
-                                "fully compatible with stb-tester.  For best "
-                                "compatibilty install Python 3.6", o)
+                                "fully compatible with stb-tester %s. "
+                                "For best compatibility install Python %s.",
+                                o, stbt_version, v)
                         break
                 except (subprocess.CalledProcessError, OSError):
                     # Doesn't exist, or there's something wrong with it
