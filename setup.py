@@ -9,10 +9,16 @@ long_description = """\
 Command-line tool & library for interacting with the Stb-tester Portal's [REST
 API].
 
-For more details see [IDE Configuration] in the Stb-tester manual.
+* Copyright © 2017-2022 Stb-tester.com Ltd.
+* License: MIT License (see [LICENSE])
 
-[IDE Configuration]: https://stb-tester.com/manual/ide-configuration
+For more details see [stbt_rig CLI] and [IDE Integration] in the Stb-tester
+manual.
+
+[IDE Integration]: https://stb-tester.com/manual/ide
+[LICENSE]: https://github.com/stb-tester/stbt-rig/blob/main/LICENSE
 [REST API]: https://stb-tester.com/manual/rest-api-v2
+[stbt_rig CLI]: https://stb-tester.com/manual/stbt-rig
 """
 
 setuptools.setup(
