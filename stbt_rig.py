@@ -590,24 +590,31 @@ def cmd_setup(args, node_id):
         os.environ["VIRTUAL_ENV"] = os.path.join(root, ".venv")
 
         # Install dependencies
-        pip_deps = [
-            "pylint==1.8.3",
-            "astroid==1.6.0",
-            "pytest>=4.6,<4.7",
-            "isort==4.3.4",
-            "keyring",
-            "requests",
-            "tzlocal",
-        ]
+        if stbt_version < 33:
+            pip_deps = [
+                "keyring",
+                "requests",
+                "tzlocal",
+                "pytest>=4.6,<4.7",
+                "pylint==1.8.3",
+                "astroid==1.6.0",
+                "isort==4.3.4",
+            ]
+        else:
+            pip_deps = [
+                "keyring",
+                "requests",
+                "tzlocal",
+                "pytest~=6.2.5",
+            ]
 
         if stbt_version == 32:
             # Contains pylint fixes on Windows and Intellisense fixes.  This
             # ensures that existing .venvs are upgraded:
-            pip_deps.append("stbt_core>=32.0.4")
-            pip_deps.append("stb-tester>=32.2,<33")
+            pip_deps.append("stbt_core>=32.0.4,==32.*")
+            pip_deps.append("stb-tester~=32.2")
         else:
-            pip_deps.append(
-                "stb-tester>=%s,<%s" % (stbt_version, stbt_version + 1))
+            pip_deps.append("stb-tester~=%s.0" % (stbt_version,))
 
         python = _venv_exe("python", root=root)
         subprocess.check_call(
