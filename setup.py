@@ -41,13 +41,13 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 2.7",
-        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3",
         "Topic :: Software Development :: Testing",
     ],
-    # I have only tested Python 2.7 & 3.6
     python_requires=">=2.7",
     install_requires=[
         "keyring",
         "requests",
+        "tzlocal; python_version>=3",
     ],
 )
