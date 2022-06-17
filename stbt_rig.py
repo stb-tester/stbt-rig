@@ -364,8 +364,8 @@ def argparser():
 
     setup_parser = subcommands.add_parser(
         "setup", help="Setup your venv for development",
-        description="""Creates a Python venv and installs dependencies needed
-        for test-script development.""")
+        description="""Creates a Python venv in ".venv" and installs
+        dependencies needed for IDE autocompletion & linting.""")
     setup_parser.add_argument(
         "--vscode", action="store_true",
         help="Update VSCode settings.json with recommended settings")
@@ -554,40 +554,34 @@ def cmd_setup(args, node_id):
             v = "3.10"
         else:
             v = "3.6"
-        python_executable_names = (["python%s" % v], ["py", "-%s" % v],
-                                   ["python"], ["python3"], ["py", "-3"])
 
-        if not os.path.exists("%s/.venv" % root):
-            python = None
-            for python in python_executable_names:
-                try:
-                    o = to_unicode(subprocess.check_output(
-                        python + ["-c", "import sys; print(sys.version)"],
-                        stdin=open(os.devnull))).strip()
-                    if o.startswith("3."):
-                        if not o.startswith(v + "."):
-                            logger.warning(
-                                "Using Python version %s which may not be "
-                                "fully compatible with stb-tester %s. "
-                                "For best compatibility install Python %s.",
-                                o, stbt_version, v)
-                        break
-                except (subprocess.CalledProcessError, OSError):
-                    # Doesn't exist, or there's something wrong with it
-                    pass
-            else:
-                die("Can't find python %s in PATH" % python_version)
+        system_python_exe, system_python_version = _find_python_executable(
+            v, stbt_version)
 
-            # Create venv
-            subprocess.check_call(python + ['-m', 'venv', '.venv'], cwd=root)
+        venv_dir = os.path.join(root, ".venv")
+
+        if os.path.exists(venv_dir):
+            venv_python_version = _get_python_version([_venv_exe("python", root)])
+            if (system_python_version.startswith(v + ".") and
+                    not venv_python_version.startswith(v + ".")):
+                logging.warning(
+                    "Virtualenv in '%s' has Python version %s; "
+                    "deleting .venv and recreating it with Python %s.",
+                    venv_dir, venv_python_version, v)
+                shutil.rmtree(venv_dir)
+
+        if not os.path.exists(venv_dir):
+            # Create .venv
+            subprocess.check_call(system_python_exe + ['-m', 'venv', '.venv'],
+                                  cwd=root)
 
         if platform.system() == "Windows":
             b = "Scripts"
         else:
             b = "bin"
-        os.environ["PATH"] = (os.path.join(root, ".venv", b) + os.pathsep +
+        os.environ["PATH"] = (os.path.join(venv_dir, b) + os.pathsep +
                               os.environ.get("PATH", ""))
-        os.environ["VIRTUAL_ENV"] = os.path.join(root, ".venv")
+        os.environ["VIRTUAL_ENV"] = venv_dir
 
         # Install dependencies
         if stbt_version < 33:
@@ -704,6 +698,33 @@ def cmd_setup(args, node_id):
 
         if args.vscode:
             _update_vscode_config()
+
+
+def _find_python_executable(v, stbt_version):
+    python_executable_names = (["python%s" % v], ["py", "-%s" % v],
+                               ["python"], ["python3"], ["py", "-3"])
+    for python in python_executable_names:
+        try:
+            o = _get_python_version(python)
+            if o.startswith("3."):
+                if not o.startswith(v + "."):
+                    logger.warning(
+                        "Using Python version %s which may not be "
+                        "fully compatible with stb-tester %s. "
+                        "For best compatibility install Python %s.",
+                        o, stbt_version, v)
+                return python, o
+        except (subprocess.CalledProcessError, OSError):
+            # Doesn't exist, or there's something wrong with it
+            pass
+    die("Can't find python %s in PATH" % v)
+    return None  # for pylint
+
+
+def _get_python_version(python_exe):  # -> str
+    return to_unicode(subprocess.check_output(
+        python_exe + ["-c", "import sys; print(sys.version.split(' ')[0])"],
+        stdin=open(os.devnull))).strip()
 
 
 def _venv_exe(exe, root=None):
