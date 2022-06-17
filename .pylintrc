@@ -8,10 +8,12 @@ reports=no
 
 [MESSAGES CONTROL]
 disable=
+  import-outside-toplevel,
   invalid-name,
   locally-disabled,
   locally-enabled,
   missing-docstring,
+  no-else-raise,
   no-else-return,
   protected-access,
   redefined-builtin,
@@ -27,6 +29,7 @@ disable=
   too-many-public-methods,
   too-many-return-statements,
   too-many-statements,
+  useless-object-inheritance,
 
 [TYPECHECK]
 ignored-classes=Args

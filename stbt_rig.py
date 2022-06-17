@@ -364,8 +364,8 @@ def argparser():
 
     setup_parser = subcommands.add_parser(
         "setup", help="Setup your venv for development",
-        description="""Creates a Python venv and installs dependencies needed
-        for test-script development.""")
+        description="""Creates a Python venv in ".venv" and installs
+        dependencies needed for IDE autocompletion & linting.""")
     setup_parser.add_argument(
         "--vscode", action="store_true",
         help="Update VSCode settings.json with recommended settings")
@@ -540,156 +540,207 @@ def cmd_setup(args, node_id):
     root = find_test_pack_root()
 
     if os.environ.get("STBT_RIG_SECOND_STAGE") != "1":
-        _, config_parser = read_stbt_conf(root)
-        stbt_version = int(config_parser.get("test_pack", "stbt_version"))
-        python_version = config_parser.get("test_pack", "python_version")
+        # First we create a venv
+        setup_stage1(this_stbt_rig, root)
+    else:
+        # Then we re-exec `stbt_rig.py setup` to complete setup inside the venv.
+        setup_stage2(this_stbt_rig, root, args, node_id)
 
-        if python_version != "3":
-            sys.stderr.write(
-                "Python version %r is not supported by stbt_rig.py setup.  "
-                "Please contact support@stb-tester.com\n" % (python_version,))
-            sys.exit(1)
 
-        if not os.path.exists("%s/.venv" % root):
-            python = None
-            for python in (["python3.6"], ["py", "-3.6"], ["python"],
-                           ["python3"], ["py", "-3"]):
-                try:
-                    o = subprocess.check_output(
-                        python + ["-c", "import sys; print(sys.version)"],
-                        stdin=open(os.devnull)).strip()
-                    if o.startswith(to_bytes("%s." % python_version)):
-                        if not o.startswith(to_bytes("3.6.")):
-                            logger.warning(
-                                "Using Python version %s which may not be "
-                                "fully compatible with stb-tester.  For best "
-                                "compatibilty install Python 3.6", o)
-                        break
-                except (subprocess.CalledProcessError, OSError):
-                    # Doesn't exist, or there's something wrong with it
-                    pass
-            else:
-                die("Can't find python %s in PATH" % python_version)
+def setup_stage1(this_stbt_rig, root):
+    _, config_parser = read_stbt_conf(root)
+    stbt_version = int(config_parser.get("test_pack", "stbt_version"))
+    python_version = config_parser.get("test_pack", "python_version")
 
-            # Create venv
-            subprocess.check_call(python + ['-m', 'venv', '.venv'], cwd=root)
+    if python_version != "3":
+        sys.stderr.write(
+            "Python version %r is not supported by stbt_rig.py setup.  "
+            "Please contact support@stb-tester.com\n" % (python_version,))
+        sys.exit(1)
 
-        if platform.system() == "Windows":
-            b = "Scripts"
-        else:
-            b = "bin"
-        os.environ["PATH"] = (os.path.join(root, ".venv", b) + os.pathsep +
-                              os.environ.get("PATH", ""))
-        os.environ["VIRTUAL_ENV"] = os.path.join(root, ".venv")
+    if stbt_version >= 33:
+        v = "3.10"
+    else:
+        v = "3.6"
 
-        # Install dependencies
+    system_python_exe, system_python_version = _find_python_executable(
+        v, stbt_version)
+
+    venv_dir = os.path.join(root, ".venv")
+
+    if os.path.exists(venv_dir):
+        venv_python_version = _get_python_version([_venv_exe("python", root)])
+        if (system_python_version.startswith(v + ".") and
+                not venv_python_version.startswith(v + ".")):
+            logging.warning(
+                "Virtualenv in '%s' has Python version %s; "
+                "deleting .venv and recreating it with Python %s.",
+                venv_dir, venv_python_version, v)
+            while True:
+                ok = ask("Delete and recreate .venv? [y/n] ").lower().strip()
+                if ok == "y":
+                    shutil.rmtree(venv_dir)
+                    break
+                elif ok == "n":
+                    break
+
+    if not os.path.exists(venv_dir):
+        # Create .venv
+        subprocess.check_call(system_python_exe + ['-m', 'venv', '.venv'],
+                              cwd=root)
+
+    if platform.system() == "Windows":
+        b = "Scripts"
+    else:
+        b = "bin"
+    os.environ["PATH"] = (os.path.join(venv_dir, b) + os.pathsep +
+                          os.environ.get("PATH", ""))
+    os.environ["VIRTUAL_ENV"] = venv_dir
+
+    # Install dependencies
+    if stbt_version < 33:
         pip_deps = [
-            "pylint==1.8.3",
-            "astroid==1.6.0",
-            "pytest>=4.6,<4.7",
-            "isort==4.3.4",
             "keyring",
             "requests",
             "tzlocal",
+            "pytest>=4.6,<4.7",
+            "pylint==1.8.3",
+            "astroid==1.6.0",
+            "isort==4.3.4",
+        ]
+    else:
+        pip_deps = [
+            "keyring",
+            "requests",
+            "tzlocal",
+            "pytest~=6.2.5",
         ]
 
-        if stbt_version == 32:
-            # Contains pylint fixes on Windows and Intellisense fixes.  This
-            # ensures that existing .venvs are upgraded:
-            pip_deps.append("stbt_core>=32.0.4")
-            pip_deps.append("stb-tester>=32.2,<33")
-        else:
-            pip_deps.append(
-                "stb-tester>=%s,<%s" % (stbt_version, stbt_version + 1))
-
-        python = _venv_exe("python", root=root)
-        subprocess.check_call(
-            [python, "-m", "pip", 'install', '--upgrade', 'pip'],
-            cwd=root)
-        subprocess.check_call(
-            [python, "-m", "pip", 'install'] + pip_deps, cwd=root)
-
-        os.environ["STBT_RIG_SECOND_STAGE"] = "1"
-
-        # We re-exec ourselves into the venv now that we've installed all our
-        # dependencies
-        cmd = [python, this_stbt_rig] + sys.argv[1:]
-        if platform.system() == "Windows":
-            # Windows has execv, but the process ends up backgrounded which
-            # breaks interactive use, so subprocess instead.
-            os._exit(subprocess.call(cmd))
-        else:
-            os.execv(cmd[0], cmd)
+    if stbt_version == 32:
+        # Contains pylint fixes on Windows and Intellisense fixes.  This
+        # ensures that existing .venvs are upgraded:
+        pip_deps.append("stbt_core>=32.0.4,==32.*")
+        pip_deps.append("stb-tester~=32.2")
     else:
-        # Install this stbt_rig as a python module in the venv:
-        venv_site_packages = sys.path[-1]
-        this_stbt_rig_rel = os.path.relpath(this_stbt_rig, venv_site_packages)
-        pkg = os.path.join(venv_site_packages, "stbt_rig.py")
-        if this_stbt_rig_rel != "stbt_rig.py":
-            if platform.system() == "Windows":
-                shutil.copyfile(this_stbt_rig, pkg)
-            else:
-                try:
-                    os.unlink(pkg)
-                except OSError:
-                    # File doesn't exist
-                    pass
-                os.symlink(this_stbt_rig_rel, pkg)  # pylint: disable=no-member
+        pip_deps.append("stb-tester~=%s.0" % (stbt_version,))
 
-        os.chdir(root)
+    python = _venv_exe("python", root=root)
+    subprocess.check_call(
+        [python, "-m", "pip", 'install', '--upgrade', 'pip'],
+        cwd=root)
+    subprocess.check_call(
+        [python, "-m", "pip", 'install'] + pip_deps, cwd=root)
 
-        # This will prompt for the auth token and validate connectivity:
-        portal = Portal.from_args(args)
-        portal._get("/api/v2/user")
+    os.environ["STBT_RIG_SECOND_STAGE"] = "1"
 
-        for k in "name", "email":
+    # We re-exec ourselves into the venv now that we've installed all our
+    # dependencies
+    cmd = [python, this_stbt_rig] + sys.argv[1:]
+    if platform.system() == "Windows":
+        # Windows has execv, but the process ends up backgrounded which
+        # breaks interactive use, so subprocess instead.
+        os._exit(subprocess.call(cmd))
+    else:
+        os.execv(cmd[0], cmd)
+
+
+def setup_stage2(this_stbt_rig, root, args, node_id):
+    # Install this stbt_rig as a python module in the venv:
+    venv_site_packages = sys.path[-1]
+    this_stbt_rig_rel = os.path.relpath(this_stbt_rig, venv_site_packages)
+    pkg = os.path.join(venv_site_packages, "stbt_rig.py")
+    if this_stbt_rig_rel != "stbt_rig.py":
+        if platform.system() == "Windows":
+            shutil.copyfile(this_stbt_rig, pkg)
+        else:
             try:
-                subprocess.check_output(["git", "config", "user.%s" % k])
-            except subprocess.CalledProcessError as e:
-                if e.returncode == 1:
-                    v = ask("What is your %s (for git commits): " % k)
-                    subprocess.check_output(["git", "config", "user.%s" % k, v])
-                else:
-                    raise
+                os.unlink(pkg)
+            except OSError:
+                # File doesn't exist
+                pass
+            os.symlink(this_stbt_rig_rel, pkg)  # pylint: disable=no-member
 
-        # Setup .env to include our node-id so we don't need to specify it every
-        # time
-        while not node_id:
-            r = portal._get("/api/_private/workgroup")
-            r.raise_for_status()
-            nodes = [n['id'] for n in r.json()]
-            assert nodes
-            if len(nodes) == 1:
-                node_id = nodes[0]
+    os.chdir(root)
+
+    # This will prompt for the auth token and validate connectivity:
+    portal = Portal.from_args(args)
+    portal._get("/api/v2/user")
+
+    for k in "name", "email":
+        try:
+            subprocess.check_output(["git", "config", "user.%s" % k])
+        except subprocess.CalledProcessError as e:
+            if e.returncode == 1:
+                v = ask("What is your %s (for git commits): " % k)
+                subprocess.check_output(["git", "config", "user.%s" % k, v])
             else:
-                sys.stderr.write("These nodes are attached to the portal:\n")
-                for (n, node) in enumerate(nodes, 1):
-                    sys.stderr.write("  %i) %s\n" % (n, node))
-                node_no = ask("Which node do you want to use by default? ")
-                try:
-                    node_idx = int(node_no) - 1
-                    if node_idx < 0:
-                        raise ValueError()
-                    node_id = nodes[node_idx]
-                except (ValueError, IndexError):
-                    sys.stderr.write(
-                        "%r is not a valid number, please enter a value "
-                        "between 1 and %i\n" % (node_no, len(nodes)))
-                    continue
-            if node_id not in nodes:
+                raise
+
+    # Setup .env to include our node-id so we don't need to specify it every
+    # time
+    while not node_id:
+        r = portal._get("/api/_private/workgroup")
+        r.raise_for_status()
+        nodes = [n['id'] for n in r.json()]
+        assert nodes
+        if len(nodes) == 1:
+            node_id = nodes[0]
+        else:
+            sys.stderr.write("These nodes are attached to the portal:\n")
+            for (n, node) in enumerate(nodes, 1):
+                sys.stderr.write("  %i) %s\n" % (n, node))
+            node_no = ask("Which node do you want to use by default? ")
+            try:
+                node_idx = int(node_no) - 1
+                if node_idx < 0:
+                    raise ValueError()
+                node_id = nodes[node_idx]
+            except (ValueError, IndexError):
                 sys.stderr.write(
-                    "%r is not a node attached to this portal.  Try again.\n" %
-                    node_id)
+                    "%r is not a valid number, please enter a value "
+                    "between 1 and %i\n" % (node_no, len(nodes)))
+                continue
+        if node_id not in nodes:
+            sys.stderr.write(
+                "%r is not a node attached to this portal.  Try again.\n" %
+                node_id)
 
-        sys.stderr.write(
-            "Node %s will be used by default.  Edit .env to change\n" % node_id)
+    sys.stderr.write(
+        "Node %s will be used by default.  Edit .env to change\n" % node_id)
 
-        updates = {}
-        updates[b"STBT_NODE_ID"] = node_id.encode("utf-8")
-        _update_env(updates)
+    updates = {}
+    updates[b"STBT_NODE_ID"] = node_id.encode("utf-8")
+    _update_env(updates)
 
-        if args.vscode:
-            _update_vscode_config()
+    if args.vscode:
+        _update_vscode_config()
+
+
+def _find_python_executable(v, stbt_version):
+    python_executable_names = (["python%s" % v], ["py", "-%s" % v],
+                               ["python"], ["python3"], ["py", "-3"])
+    for python in python_executable_names:
+        try:
+            o = _get_python_version(python)
+            if o.startswith("3."):
+                if not o.startswith(v + "."):
+                    logger.warning(
+                        "Using Python version %s which may not be "
+                        "fully compatible with stb-tester %s. "
+                        "For best compatibility install Python %s.",
+                        o, stbt_version, v)
+                return python, o
+        except (subprocess.CalledProcessError, OSError):
+            # Doesn't exist, or there's something wrong with it
+            pass
+    die("Can't find python %s in PATH" % v)
+    return None  # for pylint
+
+
+def _get_python_version(python_exe):  # -> str
+    return to_unicode(subprocess.check_output(
+        python_exe + ["-c", "import sys; print(sys.version.split(' ')[0])"],
+        stdin=open(os.devnull))).strip()
 
 
 def _venv_exe(exe, root=None):

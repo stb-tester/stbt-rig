@@ -1,9 +1,0 @@
-FROM ubuntu:18.04
-ADD requirements.txt requirements.txt
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt update && \
-    apt install -y \
-        git \
-        python3-pip && \
-    pip3 install -r requirements.txt && \
-    rm requirements.txt

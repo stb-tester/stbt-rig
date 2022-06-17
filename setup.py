@@ -9,15 +9,21 @@ long_description = """\
 Command-line tool & library for interacting with the Stb-tester Portal's [REST
 API].
 
-For more details see [IDE Configuration] in the Stb-tester manual.
+* Copyright © 2017-2022 Stb-tester.com Ltd.
+* License: MIT License (see [LICENSE])
 
-[IDE Configuration]: https://stb-tester.com/manual/ide-configuration
+For more details see [stbt_rig CLI] and [IDE Integration] in the Stb-tester
+manual.
+
+[IDE Integration]: https://stb-tester.com/manual/ide
+[LICENSE]: https://github.com/stb-tester/stbt-rig/blob/main/LICENSE
 [REST API]: https://stb-tester.com/manual/rest-api-v2
+[stbt_rig CLI]: https://stb-tester.com/manual/stbt-rig
 """
 
 setuptools.setup(
     name="stbt_rig",
-    version="2.0.2",
+    version="33.0.0",
     author="Stb-tester.com Ltd.",
     author_email="support@stb-tester.com",
     description="Library for interacting with the Stb-tester Portal's REST API",
@@ -35,13 +41,13 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 2.7",
-        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3",
         "Topic :: Software Development :: Testing",
     ],
-    # I have only tested Python 2.7 & 3.6
     python_requires=">=2.7",
     install_requires=[
         "keyring",
         "requests",
+        "tzlocal; python_version>=3",
     ],
 )
