@@ -576,7 +576,13 @@ def setup_stage1(this_stbt_rig, root):
                 "Virtualenv in '%s' has Python version %s; "
                 "deleting .venv and recreating it with Python %s.",
                 venv_dir, venv_python_version, v)
-            shutil.rmtree(venv_dir)
+            while True:
+                ok = ask("Delete and recreate .venv? [y/n] ").lower().strip()
+                if ok == "y":
+                    shutil.rmtree(venv_dir)
+                    break
+                elif ok == "n":
+                    break
 
     if not os.path.exists(venv_dir):
         # Create .venv
