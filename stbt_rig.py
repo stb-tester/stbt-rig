@@ -89,6 +89,8 @@ def resolve_args(args):
             args.mode = "jenkins"
         elif "bamboo_agentWorkingDirectory" in os.environ:
             args.mode = "bamboo"
+        elif "GITLAB_CI" in os.environ:
+            args.mode = "gitlab"
         else:
             args.mode = "interactive"
 
@@ -223,11 +225,12 @@ ARGS = [
         to push temporary snapshots to git: that is, "run" and "press" when
         "--mode=interactive"."""),
 
-    Arg("--mode", choices=["auto", "bamboo", "interactive", "jenkins"],
+    Arg("--mode",
+        choices=["auto", "bamboo", "gitlab", "interactive", "jenkins"],
         default="auto",
         help="""See <https://stb-tester.com/manual/stbt-rig#interactive-mode>.
         This defaults to "auto", which detects whether or not it is being run
-        inside Jenkins or Bamboo.""", cmdline_only=True),
+        inside Bamboo/GitLab/Jenkins.""", cmdline_only=True),
 
     Arg("--csv", metavar="FILENAME",
         help="Also write test-results in CSV format to the specified file."),
@@ -245,9 +248,9 @@ RUN_ARGS = [
     Arg("--test-pack-revision", metavar="GIT_SHA", help="""Git commit SHA in
         the test-pack repository identifying the version of the tests to run.
         Can also be the name of a git branch or tag. In interactive mode this
-        defaults to a snapshot of your current working directory. In jenkins
-        mode this defaults to the test-pack repository's default branch
-        (typically "main")."""),
+        defaults to a snapshot of your current working directory. In
+        bamboo/gitlab/jenkins mode this defaults to the test-pack repository's
+        default branch (typically "main")."""),
 
     Arg("--remote-control", metavar="NAME", help="""The remote control infrared
         configuration to use when running the tests. This should match the name
@@ -259,8 +262,8 @@ RUN_ARGS = [
 
     Arg("--category", metavar="NAME", help="""Category to save the test-results
         in. When you are viewing test results you can filter by this string. In
-        interactive mode this defaults to the branch name. In jenkins mode
-        this defaults to the Jenkins job name."""),
+        interactive mode this defaults to the branch name. In
+        bamboo/gitlab/jenkins mode this defaults to the CI job name."""),
 
     Arg("--soak", action="store_true", help="""Run the testcases forever until
         you interrupt them by pressing Control-C.""", cmdline_only=True),
@@ -287,8 +290,10 @@ RUN_ARGS = [
         required."""),
 
     Arg("--junit-xml", action="append", dest="junit_xml", default=[],
-        help="""Save JUnit style XML file with results to this path.  This is
-        enabled by default in jenkins or bamboo mode.""", cmdline_only=True),
+        help="""Save test-results in JUnit XML format to this filename. In
+        bamboo/gitlab/jenkins mode this is enabled by default, with the
+        filename 'stbt-results.xml'.""",
+        cmdline_only=True),
 
     Arg("test_cases", nargs='+', metavar="TESTCASE",
         help="""One or more tests to run. Test names have the form
@@ -318,10 +323,10 @@ def argparser():
         "run", help="Run testcases",
         description="""Run the specified testcases on the specified Stb-tester
         node. In interactive mode (the default mode if not running inside a
-        Jenkins job) it also pushes a snapshot of your current test-pack and
-        pushes it to the branch "@YOUR_USERNAME's snapshot" on the Stb-tester
-        Portal, so that you don't have to make lots of temporary git commits to
-        debug your test scripts.""")
+        Bamboo/GitLab/Jenkins job) it also pushes a snapshot of your current
+        test-pack and pushes it to the branch "@YOUR_USERNAME's snapshot" on
+        the Stb-tester Portal, so that you don't have to make lots of temporary
+        git commits to debug your test scripts.""")
 
     for arg in RUN_ARGS:
         arg.add(run_parser)
@@ -402,7 +407,7 @@ def cmd_run_prep(args, portal):
         elif args.mode == "pytest":
             commit_sha = TestPack(remote=args.git_remote) \
                          .push_git_snapshot(branch_name, interactive=False)
-        elif args.mode in ["bamboo", "jenkins"]:
+        elif args.mode in ["bamboo", "gitlab", "jenkins"]:
             # We assume that when in CI we're not in the git repo of the
             # test-pack, so run tests from main.
             commit_sha = "HEAD"
@@ -418,6 +423,8 @@ def cmd_run_prep(args, portal):
             category = os.environ["JOB_NAME"]
         elif args.mode == "bamboo":
             category = os.environ["bamboo_shortJobName"]
+        elif args.mode == "gitlab":
+            category = os.environ["CI_JOB_NAME"]
         else:
             assert False, "Unreachable: Unknown mode %r" % args.mode
 
@@ -445,6 +452,20 @@ def cmd_run_prep(args, portal):
             value = os.environ.get(v.replace(".", "_"))
             if value:
                 tags[v] = value
+    elif args.mode == "gitlab":
+        # Record gitlab CI variables as Stb-tester tags.
+        # https://docs.gitlab.com/ee/ci/variables/predefined_variables.html
+        for v in ["CI_COMMIT_REF_NAME",
+                  "CI_COMMIT_SHA",
+                  "CI_ENVIRONMENT_NAME",
+                  "CI_JOB_ID",
+                  "CI_JOB_NAME",
+                  "CI_JOB_STAGE",
+                  "CI_JOB_URL",
+                  "CI_PROJECT_URL",
+                  "CI_REPOSITORY_URL"]:
+            if os.environ.get(v):
+                tags["gitlab/%s" % v] = os.environ[v]
     for tag in args.tags:
         try:
             name, value = tag.split("=", 1)
@@ -483,7 +504,7 @@ def cmd_run_body(args, node, j):
             print("")
             print(result.json["triage_url"])
             result.print_logs()
-    elif args.mode in ["bamboo", "jenkins"]:
+    elif args.mode in ["bamboo", "gitlab", "jenkins"]:
         # Record results in XML format for the Jenkins JUnit plugin
         if not args.junit_xml:
             args.junit_xml = ["stbt-results.xml"]
@@ -916,17 +937,19 @@ class PortalAuthTokensAdapter(HTTPAdapter):
             yield token
             return
         elif self.mode == "jenkins":
-            die("No access token specified. Use the Jenkins Credentials "
-                "Binding plugin to provide the access token in the "
+            die("No access token for the Stb-tester Portal. Use the Jenkins "
+                "Credentials Binding plugin to provide the access token in the "
                 "environment variable STBT_AUTH_TOKEN")
-
-        if self.mode == "bamboo":
+        elif self.mode == "gitlab":
+            die("No access token for the Stb-tester Portal. Specify the "
+                "access token in the environment variable STBT_AUTH_TOKEN")
+        elif self.mode == "bamboo":
             token = os.environ.get("bamboo_STBT_AUTH_PASSWORD")
             if token:
                 yield token
             else:
-                die("No access token specified. Provide the access token in "
-                    "the variable bamboo.STBT_AUTH_PASSWORD")
+                die("No access token for the Stb-tester Portal. Specify the "
+                    "access token in the variable bamboo.STBT_AUTH_PASSWORD")
             return
 
         assert self.mode in ["interactive", "pytest"], \
