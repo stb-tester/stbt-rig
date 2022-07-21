@@ -571,7 +571,10 @@ def cmd_setup(args, node_id):
 def setup_stage1(this_stbt_rig, root):
     _, config_parser = read_stbt_conf(root)
     stbt_version = int(config_parser.get("test_pack", "stbt_version"))
-    python_version = config_parser.get("test_pack", "python_version")
+    if stbt_version >= 33:
+        python_version = "3"
+    else:
+        python_version = config_parser.get("test_pack", "python_version")
 
     if python_version != "3":
         sys.stderr.write(
