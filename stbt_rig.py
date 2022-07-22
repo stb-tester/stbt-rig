@@ -6,7 +6,7 @@
 For more details, and to get the latest version of this script, see
 <https://stb-tester.com/manual/stbt-rig>.
 
-Copyright 2017-2020 Stb-tester.com Ltd. <support@stb-tester.com>
+Copyright 2017-2022 Stb-tester.com Ltd. <support@stb-tester.com>
 Released under the MIT license.
 """
 
