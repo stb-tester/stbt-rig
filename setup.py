@@ -48,6 +48,6 @@ setuptools.setup(
     install_requires=[
         "keyring",
         "requests",
-        "tzlocal; python_version>=3",
+        "tzlocal; python_version>='3'",
     ],
 )
