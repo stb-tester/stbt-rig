@@ -647,13 +647,14 @@ def setup_stage1(this_stbt_rig, root):
         pip_deps.append("stb-tester~=32.2")
     else:
         pip_deps.append("stb-tester~=%s.0" % (stbt_version,))
+        pip_deps.append("stbt_core~=%s.0" % (stbt_version,))
 
     python = _venv_exe("python", root=root)
     subprocess.check_call(
         [python, "-m", "pip", 'install', '--upgrade', 'pip'],
         cwd=root)
     subprocess.check_call(
-        [python, "-m", "pip", 'install'] + pip_deps, cwd=root)
+        [python, "-m", "pip", 'install', '--upgrade'] + pip_deps, cwd=root)
 
     os.environ["STBT_RIG_SECOND_STAGE"] = "1"
 
