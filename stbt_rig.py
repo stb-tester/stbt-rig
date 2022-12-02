@@ -973,10 +973,7 @@ class PortalAuthTokensAdapter(HTTPAdapter):
         while True:
             token = ask('Enter Access Token for portal %s: ' % self.portal_url)
             if not token:
-                # EOF
-                sys.stderr.write("EOF!\n")
-                sys.stderr.flush()
-                break
+                continue
             token = token.strip()
             if token:
                 if keyring is not None:
