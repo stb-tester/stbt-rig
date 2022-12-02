@@ -728,10 +728,6 @@ def setup_stage2(this_stbt_rig, root, args, node_id):
                     "%r is not a valid number, please enter a value "
                     "between 1 and %i\n" % (node_no, len(nodes)))
                 continue
-        if node_id not in nodes:
-            sys.stderr.write(
-                "%r is not a node attached to this portal.  Try again.\n" %
-                node_id)
 
     sys.stderr.write(
         "Node %s will be used by default.  Edit .env to change\n" % node_id)
