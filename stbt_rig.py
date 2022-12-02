@@ -731,7 +731,7 @@ def setup_stage2(this_stbt_rig, root, args, node_id):
                 continue
 
     sys.stderr.write(
-        "Node %s will be used by default.  Edit .env to change\n" % node_id)
+        "Node %s will be used by default. Edit '.env' to change.\n" % node_id)
 
     updates = {}
     updates[b"STBT_NODE_ID"] = node_id.encode("utf-8")
