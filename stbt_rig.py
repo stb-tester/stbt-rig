@@ -970,7 +970,7 @@ class PortalAuthTokensAdapter(HTTPAdapter):
                 yield out
         except ImportError:
             sys.stderr.write(
-                "Install the python keyring package so you don't need to "
+                "Install the python \"keyring\" package so you don't need to "
                 "enter your API token every time\n")
 
         while True:
