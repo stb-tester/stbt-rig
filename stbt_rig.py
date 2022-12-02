@@ -612,7 +612,8 @@ def setup_stage1(this_stbt_rig, root):
                     break
 
     if not os.path.exists(venv_dir):
-        # Create .venv
+        logging.info("Creating virtualenv in '%s' with Python %s",
+                     venv_dir, system_python_version)
         subprocess.check_call(system_python_exe + ['-m', 'venv', '.venv'],
                               cwd=root)
 
