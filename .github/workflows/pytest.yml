@@ -13,20 +13,20 @@ jobs:
   build:
     strategy:
       matrix:
-        environment: ["ubuntu-latest", "macos-latest", "windows-latest"]
+        environment: [ubuntu-20.04, macos-latest, windows-latest]
         python-version: ["2.7", "3.5", "3.6", "3.7", "3.8", "3.10"]
         include:
-          - environment: ubuntu-latest
+          - environment: ubuntu-20.04
             setup: dbus-run-session sh -c 'env $(echo password | gnome-keyring-daemon --unlock) "$0" "$@"'
 
     runs-on: ${{ matrix.environment }}
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Install gnome keyring
       run: sudo apt-get install gnome-keyring
-      if: ${{ matrix.environment == 'ubuntu-latest' }}
+      if: ${{ matrix.environment == 'ubuntu-20.04' }}
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
