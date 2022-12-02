@@ -72,6 +72,9 @@ def main(argv=None):
     if hasattr(signal, "SIGHUP"):
         signal.signal(signal.SIGHUP, _exit)  # pylint:disable=no-member
 
+    if args.command == "setup" and args.verbosity == 0:
+        args.verbosity = 1
+
     logging.basicConfig(
         format="%(filename)s: %(levelname)s: %(message)s",
         level=logging.WARNING - args.verbosity * 10)
