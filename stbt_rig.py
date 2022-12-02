@@ -72,6 +72,9 @@ def main(argv=None):
     if hasattr(signal, "SIGHUP"):
         signal.signal(signal.SIGHUP, _exit)  # pylint:disable=no-member
 
+    if args.command == "setup" and args.verbosity == 0:
+        args.verbosity = 1
+
     logging.basicConfig(
         format="%(filename)s: %(levelname)s: %(message)s",
         level=logging.WARNING - args.verbosity * 10)
@@ -609,7 +612,8 @@ def setup_stage1(this_stbt_rig, root):
                     break
 
     if not os.path.exists(venv_dir):
-        # Create .venv
+        logging.info("Creating virtualenv in '%s' with Python %s",
+                     venv_dir, system_python_version)
         subprocess.check_call(system_python_exe + ['-m', 'venv', '.venv'],
                               cwd=root)
 
@@ -725,13 +729,9 @@ def setup_stage2(this_stbt_rig, root, args, node_id):
                     "%r is not a valid number, please enter a value "
                     "between 1 and %i\n" % (node_no, len(nodes)))
                 continue
-        if node_id not in nodes:
-            sys.stderr.write(
-                "%r is not a node attached to this portal.  Try again.\n" %
-                node_id)
 
     sys.stderr.write(
-        "Node %s will be used by default.  Edit .env to change\n" % node_id)
+        "Node %s will be used by default. Edit '.env' to change.\n" % node_id)
 
     updates = {}
     updates[b"STBT_NODE_ID"] = node_id.encode("utf-8")
@@ -967,16 +967,13 @@ class PortalAuthTokensAdapter(HTTPAdapter):
                 yield out
         except ImportError:
             sys.stderr.write(
-                "Install the python keyring package so you don't need to "
+                "Install the python \"keyring\" package so you don't need to "
                 "enter your API token every time\n")
 
         while True:
             token = ask('Enter Access Token for portal %s: ' % self.portal_url)
             if not token:
-                # EOF
-                sys.stderr.write("EOF!\n")
-                sys.stderr.flush()
-                break
+                continue
             token = token.strip()
             if token:
                 if keyring is not None:
