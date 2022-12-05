@@ -962,13 +962,19 @@ class PortalAuthTokensAdapter(HTTPAdapter):
         keyring = None
         try:
             import keyring
-            out = keyring.get_password(self.portal_url, "stb-tester")
-            if out:
-                yield out
+            token = keyring.get_password(self.portal_url, "stb-tester")
+            if token:
+                yield token
         except ImportError:
             sys.stderr.write(
                 "Install the python \"keyring\" package so you don't need to "
                 "enter your API token every time\n")
+
+        if self.mode == "pytest":
+            die("%s access token for portal %s. "
+                "Run 'py stbt_rig.py setup --vscode'."
+                % ("Invalid" if token else "No",
+                   self.portal_url,))
 
         while True:
             token = ask('Enter Access Token for portal %s: ' % self.portal_url)

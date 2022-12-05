@@ -280,13 +280,17 @@ def test_file_lock():
                     time.sleep(0.2)
                     q.put(n)
 
-        for x in range(9):
-            threading.Thread(target=proc).start()
+        threads = [threading.Thread(target=proc) for _ in range(9)]
+        for t in threads:
+            t.start()
         proc()
 
         for x in range(10):
             # Without locking the numbers would be all jumbled up
             assert q.get() == q.get()
+
+        for t in threads:
+            t.join()
 
 
 def _find_file(path, root=os.path.dirname(os.path.abspath(__file__))):
