@@ -23,7 +23,7 @@ manual.
 
 setuptools.setup(
     name="stbt_rig",
-    version="33.0.0",
+    version="33.1.0",
     author="Stb-tester.com Ltd.",
     author_email="support@stb-tester.com",
     description="Library for interacting with the Stb-tester Portal's REST API",
