@@ -5,6 +5,7 @@ import os
 import platform
 import random
 import re
+import sys
 import threading
 import time
 from contextlib import contextmanager
@@ -13,7 +14,8 @@ from textwrap import dedent
 
 import stbt_rig
 from stbt_rig import (
-    file_lock, named_temporary_directory, to_native_str, to_unicode)
+    _modify_config, file_lock, named_temporary_directory, to_native_str,
+    to_unicode)
 from conftest import (subprocess, PortalMock)
 
 try:
@@ -287,6 +289,138 @@ def test_file_lock():
         for x in range(10):
             # Without locking the numbers would be all jumbled up
             assert q.get() == q.get()
+
+
+def test_modify_config():
+    def test(cfg):
+        if sys.version_info[0] == 2:
+            from cStringIO import StringIO
+        else:
+            from io import StringIO
+        f = list(StringIO(dedent(cfg)))
+        _modify_config(f, "encrypted_secrets", "key", "value")
+
+        # We're always idempotent:
+        copy = list(f)
+        _modify_config(copy, "encrypted_secrets", "key", "value")
+        assert f == copy
+
+        return "".join(f)
+
+    assert test("") == dedent("""
+        [encrypted_secrets]
+        key = value
+        """)
+
+    assert test("""
+        [chumberly]
+           blooblah= bloo
+        """) == dedent("""
+        [chumberly]
+           blooblah= bloo
+
+        [encrypted_secrets]
+        key = value
+        """)
+
+    assert test("[encrypted_secrets]") == dedent("""\
+        [encrypted_secrets]
+        key = value
+        """)
+
+    assert test("""
+        [chumberly]
+           blooblah= bloo
+
+        [encrypted_secrets]""") == dedent("""
+        [chumberly]
+           blooblah= bloo
+
+        [encrypted_secrets]
+        key = value
+        """)
+
+    assert test("""
+        [chumberly]
+           blooblah= bloo
+
+        [encrypted_secrets]
+        """) == dedent("""
+        [chumberly]
+           blooblah= bloo
+
+        [encrypted_secrets]
+        key = value
+        """)
+
+    assert test("""
+        [chumberly]
+           blooblah= bloo
+
+        [encrypted_secrets]
+        [clumpy_cloos]
+        """) == dedent("""
+        [chumberly]
+           blooblah= bloo
+
+        [encrypted_secrets]
+        key = value
+        [clumpy_cloos]
+        """)
+
+    # We add the new item to an existing section (minus the
+    # whitespace) in alphabetical order.
+    assert test("""
+        [chumberly]
+           blooblah= bloo
+
+        [encrypted_secrets]
+        existing1 = 5
+        existing2 = 10
+
+        # A comment!!!
+        zzz=sleep
+
+        [clumpy_cloos]
+        """) == dedent("""
+        [chumberly]
+           blooblah= bloo
+
+        [encrypted_secrets]
+        existing1 = 5
+        existing2 = 10
+        key = value
+
+        # A comment!!!
+        zzz=sleep
+
+        [clumpy_cloos]
+        """)
+
+    # Replacing an existing item:
+    assert test("""
+        [chumberly]
+           blooblah= bloo
+
+        [encrypted_secrets]
+        existing1 = 5
+        key = oldvalue
+        existing2 = 10
+
+
+        [clumpy_cloos]
+        """) == dedent("""
+        [chumberly]
+           blooblah= bloo
+
+        [encrypted_secrets]
+        existing1 = 5
+        key = value
+        existing2 = 10
+
+
+        [clumpy_cloos]
+        """)
 
 
 def _find_file(path, root=os.path.dirname(os.path.abspath(__file__))):
