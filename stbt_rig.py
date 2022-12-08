@@ -576,6 +576,7 @@ def cmd_encrypt_secret(args, portal):
         "secret can be read during a test run with:\n"
         "\n"
         "    stbt.get_config('secrets', %r)\n" % args.name)
+    return 0
 
 
 def _modify_config(cfg, section, key, value):

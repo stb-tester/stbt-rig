@@ -423,5 +423,19 @@ def test_modify_config():
         """)
 
 
+def test_encrypt_secret(portal_mock, test_pack):
+    import configparser
+
+    os.environ["STBT_AUTH_TOKEN"] = "this is my token"
+    assert 0 == stbt_rig.main([
+        'stbt_rig.py', '--portal-url=%s' % portal_mock.url,
+        'encrypt-secret', 'bloo', 'blah'])
+    del os.environ["STBT_AUTH_TOKEN"]
+
+    cp = configparser.ConfigParser()
+    cp.read(".stbt.conf")
+    assert len(cp.get("encrypted_secrets", "bloo")) == 684
+
+
 def _find_file(path, root=os.path.dirname(os.path.abspath(__file__))):
     return os.path.join(root, path)
