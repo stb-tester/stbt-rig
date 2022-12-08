@@ -176,6 +176,25 @@ class PortalMock(object):
         def _get_private_workgroup():
             return flask.jsonify([{"id": node} for node in self.nodes])
 
+        @self.app.route('/api/v2/secrets.pub.pem')
+        def _get_secrets_pub_pem():
+            return dedent("""\
+                -----BEGIN PUBLIC KEY-----
+                MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA3ktIFPwW+Bzyy1zGJq8T
+                4fPegKB69NAkmQg0tCzbi8cjItq5xhbaNZ3ALv7mSjzeDP3EYXXh5Holt5fw7Ocj
+                2p+iNL7NcsNzJmrAnQxAYxHy1Dv3QBKf+TOcbwlARwgY3nRSmAk0WqkjTGb1RADr
+                ZRmwcfD0H0AHNKTzNCYlM9AC/p1CzA2IXAIJRMGUkRCOM0C7938PvToJQPXZ4Pqe
+                Y76jdZsQAZp/FMIZj/rTOIpPbEPWPYdicbDNgkVOQr+4/MJHhuFsnUhkbACmlVf0
+                TjisY3et7ax66lyfwmLdQG3TeJKcC2AFzgfsJtIf5XEY9oHkBR0mimgKirTyNB9k
+                Zz7CIas9r/BzZOod+2Mem3of/Jib0TQ3Dt5pL4XGPfQ0vJ47nBQgVNWAngaiDOLl
+                C9Te8Lc9qiHQlYF+cgzYom1vR9VpZftVdEVNOiRwD/y7J6XdrOZ6nX7NviR2IxV7
+                X48Qha13l2lwm9yb+xSBzf26uCcFUOCOJNNS4ZnN0JtO90dw3AsXPhjCOHzjTVki
+                i2/ScQpKChXmr3ST7Hh5ZrhaCh0dAUwQ2SY/+Qk7zFVZ8wZmVTnhgRlAGUcYlzGz
+                Yroa0yq1KYyUxlwtr3wyZlZMKUmFE1827oX1zo2Bj9Zqkx4OMk9exD9zftOeieYn
+                26FzCmsrMBGi9mgIwC8mR28CAwEAAQ==
+                -----END PUBLIC KEY-----
+                """)
+
     def __enter__(self):
         from werkzeug.serving import make_server
         from werkzeug.debug import DebuggedApplication

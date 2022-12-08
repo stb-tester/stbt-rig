@@ -122,6 +122,8 @@ def main_with_args(args):
             return cmd_run(args, node)
         elif args.command == "download":
             return cmd_download(args, portal)
+        elif args.command == "encrypt-secret":
+            return cmd_encrypt_secret(args, portal)
         elif args.command == "screenshot":
             return cmd_screenshot(args, node)
         elif args.command == "snapshot":
@@ -355,6 +357,12 @@ def argparser():
         test-results view in the Stb-tester Portal -- see
         <https://stb-tester.com/manual/user-interface-reference#filter>.''')
 
+    encrypt_secret_parser = subcommands.add_parser(
+        "encrypt-secret", help="Write encrypted value to config file")
+    encrypt_secret_parser.add_argument(
+        "name", help="Name that can be used to retrieve the secret")
+    encrypt_secret_parser.add_argument("value", help="Value to be encrypted")
+
     screenshot_parser = subcommands.add_parser(
         "screenshot", help="Save a screenshot to disk",
         description="""Take a screenshot from the specified Stb-tester node
@@ -546,6 +554,76 @@ def cmd_download(args, portal):
     results = portal.get_results(args.filter)
     for result in results:
         result.download_artifacts(args.artifacts or ["*"], args.artifacts_dest)
+
+
+def cmd_encrypt_secret(args, portal):
+    import base64
+
+    pubkey = portal.get_secrets_pubkey()
+    try:
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(pubkey.encode())
+        cmd = ["openssl", "pkeyutl", "-inkey", f.name, "-pubin", "-encrypt"]
+        proc = subprocess.Popen(
+            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        encrypted, _ = proc.communicate(args.value.encode("utf-8"))
+        if proc.wait() != 0:
+            raise subprocess.CalledProcessError(proc.returncode, cmd, encrypted)
+    finally:
+        # Windows can't open a file that's already open - so we close it above,
+        # but only delete it here.
+        os.unlink(f.name)
+    encoded = base64.b64encode(encrypted).decode("utf-8")
+
+    with open("%s/.stbt.conf" % find_test_pack_root()) as f:
+        cfg = list(f)
+    _modify_config(cfg, "encrypted_secrets", args.name, encoded)
+    with open("%s/.stbt.conf" % find_test_pack_root(), "w") as f:
+        f.write("".join(cfg))
+
+    sys.stderr.write(
+        "Encrypted and added the secret to your stbt.conf.  The unencrypted "
+        "secret can be read during a test run with:\n"
+        "\n"
+        "    stbt.get_config('secrets', %r)\n" % args.name)
+    return 0
+
+
+def _modify_config(cfg, section, key, value):
+    section_start = None
+
+    cfg_line = "%s = %s\n" % (key, value)
+
+    for n, line in enumerate(cfg):
+        if re.match(r"\s*\[\s*%s\s*\]" % re.escape(section), line):
+            section_start = n
+            if not line.endswith("\n"):
+                cfg[n] = line + "\n"
+            break
+
+    if section_start is None:
+        cfg.extend(["\n", "[%s]\n" % section, cfg_line])
+        return
+
+    for n, line in enumerate(cfg[section_start + 1:], section_start + 1):
+        if re.match(re.escape(key) + r"\s*=", line):
+            cfg[n] = cfg_line
+            return
+
+        # Preserve alphabetical order:
+        keyname = line.strip().split("=")[0].strip()
+        if keyname > key or line.strip().startswith("["):
+            section_end = n
+            break
+    else:
+        section_end = len(cfg)
+
+    # Backtrack to find insertion point:
+    for section_end in range(section_end, section_start, -1):
+        prevline = cfg[section_end - 1].strip()
+        if prevline and not prevline.startswith('#'):
+            break
+    cfg.insert(section_end, cfg_line)
 
 
 def cmd_screenshot(args, node):
@@ -1401,6 +1479,11 @@ class Portal(object):
         r = self._get("/api/v2/results", params={"filter": filter})
         r.raise_for_status()
         return [Result(self, x) for x in r.json()]
+
+    def get_secrets_pubkey(self):
+        resp = self._get("/api/v2/secrets.pub.pem")
+        resp.raise_for_status()
+        return resp.text
 
     def _get(self, endpoint, timeout=60, **kwargs):
         return self._session.get(self.url(endpoint), timeout=timeout, **kwargs)
