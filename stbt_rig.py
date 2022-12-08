@@ -560,10 +560,13 @@ def cmd_encrypt_secret(args, portal):
     with tempfile.NamedTemporaryFile() as f:
         f.write(pubkey.encode())
         f.flush()
-        encrypted = subprocess.check_output(
-            ["openssl", "pkeyutl", "-inkey", f.name, "-pubin", "-encrypt"],
-            input=args.value.encode())
-    encoded = base64.b64encode(encrypted).decode()
+        cmd = ["openssl", "pkeyutl", "-inkey", f.name, "-pubin", "-encrypt"]
+        proc = subprocess.Popen(
+            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        encrypted, _ = proc.communicate(args.value.encode("utf-8"))
+        if proc.wait() != 0:
+            raise subprocess.CalledProcessError(proc.returncode, cmd, encrypted)
+    encoded = base64.b64encode(encrypted).decode("utf-8")
 
     with open("%s/.stbt.conf" % find_test_pack_root()) as f:
         cfg = list(f)
