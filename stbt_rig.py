@@ -862,6 +862,8 @@ def _update_vscode_config():
     import json
 
     VS_CODE_CONFIG = {
+        "git.fetchOnPull": True,
+        "git.pruneOnFetch": True,
         "python.envFile": "${workspaceFolder}/.env",
         "python.linting.enabled": True,
         "python.linting.mypyEnabled": False,
