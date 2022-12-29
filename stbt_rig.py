@@ -863,6 +863,7 @@ def _update_vscode_config():
 
     VS_CODE_CONFIG = {
         "git.autoStash": True,
+        "git.closeDiffOnOperation": True,
         "git.fetchOnPull": True,
         "git.pruneOnFetch": True,
         "python.envFile": "${workspaceFolder}/.env",
