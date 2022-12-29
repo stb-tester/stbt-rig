@@ -862,9 +862,12 @@ def _update_vscode_config():
     import json
 
     VS_CODE_CONFIG = {
-        "python.linting.pylintEnabled": True,
+        "python.envFile": "${workspaceFolder}/.env",
         "python.linting.enabled": True,
+        "python.linting.mypyEnabled": False,
+        "python.testing.nosetestsEnabled": False,
         "python.linting.pylintArgs": ["--load-plugins=_stbt.pylint_plugin"],
+        "python.linting.pylintEnabled": True,
         "python.testing.pytestArgs": [
             "-p", "stbt_rig",
             "-p", "no:python",
@@ -873,6 +876,8 @@ def _update_vscode_config():
             "--tb=no", "--capture=no",
             "tests"
         ],
+        "python.testing.pytestEnabled": True,
+        "python.testing.unittestEnabled": False,
         # This requires the "pucelle.run-on-save" VSCode extension:
         "runOnSave.commands": [
             {
@@ -884,12 +889,7 @@ def _update_vscode_config():
                 "runningStatusMessage": "Running stbt_rig snapshot...",
                 "finishStatusMessage": "Snapshot complete"
             }
-        ],
-        "python.testing.unittestEnabled": False,
-        "python.testing.nosetestsEnabled": False,
-        "python.testing.pytestEnabled": True,
-        "python.linting.mypyEnabled": False,
-        "python.envFile": "${workspaceFolder}/.env"
+        ]
     }
     try:
         with open(".vscode/settings.json") as f:
