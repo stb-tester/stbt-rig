@@ -866,6 +866,7 @@ def _update_vscode_config():
         "git.closeDiffOnOperation": True,
         "git.fetchOnPull": True,
         "git.pruneOnFetch": True,
+        "git.pullBeforeCheckout": True,
         "python.envFile": "${workspaceFolder}/.env",
         "python.linting.enabled": True,
         "python.linting.mypyEnabled": False,
