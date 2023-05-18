@@ -9,6 +9,7 @@ import sys
 from tempfile import NamedTemporaryFile
 import threading
 import time
+from unittest import SkipTest
 from contextlib import contextmanager
 from sys import executable as python
 from textwrap import dedent
@@ -113,19 +114,17 @@ def set_stdin(file_):
 
 
 def test_auth(capsys, portal_mock):
+    if sys.version_info[0] == 2:
+        raise SkipTest("Tests using keyring not supported on Python 2")
+
     # First we login:
     with NamedTemporaryFile("w+t") as f:
         f.write("this is my token")
         f.flush()
         f.seek(0)
         with set_stdin(f):
-            cmd_suffix = []
-            if sys.version_info[0] == 2:
-                # Optional subcommands are not supported on Python 2
-                cmd_suffix = ["get-username"]
             assert 0 == stbt_rig.main([
-                "stbt_rig.py", '--portal-url=%s' % portal_mock.url, "auth"] +
-                cmd_suffix)
+                "stbt_rig.py", '--portal-url=%s' % portal_mock.url, "auth"])
     assert capsys.readouterr().out == "tester\n"
 
     # Now we're logged in we shouldn't need to specify it again:
