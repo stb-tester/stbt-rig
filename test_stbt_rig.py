@@ -6,8 +6,10 @@ import platform
 import random
 import re
 import sys
+from tempfile import NamedTemporaryFile
 import threading
 import time
+from unittest import SkipTest
 from contextlib import contextmanager
 from sys import executable as python
 from textwrap import dedent
@@ -99,6 +101,50 @@ def test_testpack_snapshot_with_untracked_files(test_pack, capsys):
 
         To avoid this warning add untracked files (with "git add") or add them to .gitignore
         """))
+
+
+@contextmanager
+def set_stdin(file_):
+    orig_stdin = sys.stdin
+    sys.stdin = file_
+    try:
+        yield
+    finally:
+        sys.stdin = orig_stdin
+
+
+def test_auth(capsys, portal_mock):
+    if sys.version_info[0] == 2:
+        raise SkipTest("Tests using keyring not supported on Python 2")
+
+    # First we login:
+    with NamedTemporaryFile("w+t") as f:
+        f.write("this is my token")
+        f.flush()
+        f.seek(0)
+        with set_stdin(f):
+            assert 0 == stbt_rig.main([
+                "stbt_rig.py", '--portal-url=%s' % portal_mock.url, "auth"])
+    assert capsys.readouterr().out == "tester\n"
+
+    # Now we're logged in we shouldn't need to specify it again:
+    with set_stdin(open(os.devnull)):
+        assert 0 == stbt_rig.main([
+            "stbt_rig.py", '--portal-url=%s' % portal_mock.url,
+            "auth", "get-username"])
+        assert capsys.readouterr().out == "tester\n"
+
+    # Logout:
+    assert 0 == stbt_rig.main([
+        "stbt_rig.py", '--portal-url=%s' % portal_mock.url,
+        "auth", "logout"])
+    assert capsys.readouterr().err == "Deleted auth token from keyring\n"
+
+    # It's idempotent:
+    assert 0 == stbt_rig.main([
+        "stbt_rig.py", '--portal-url=%s' % portal_mock.url,
+        "auth", "logout"])
+    assert capsys.readouterr().err == "No auth token stored in keyring\n"
 
 
 def test_run_tests_interactive(capsys, test_pack, tmpdir, portal_mock):
