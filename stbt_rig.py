@@ -113,6 +113,10 @@ def main_with_args(args):
     # Do this before importing requests, we will be installing requests in here:
     if args.command == "setup":
         return cmd_setup(args, args.node_id)
+    elif args.command == "auth":
+        # auth logout doesn't require a portal - and we don't want to prompt
+        # for an auth token just before deleting it!
+        return cmd_auth(args)
 
     portal = Portal.from_args(args)
     node = Node(portal, args.node_id)
@@ -363,6 +367,15 @@ def argparser():
         "name", help="Name that can be used to retrieve the secret")
     encrypt_secret_parser.add_argument("value", help="Value to be encrypted")
 
+    auth_parser = subcommands.add_parser(
+        "auth", help="Authenticate with the Stb-tester Portal")
+    auth_subparser = auth_parser.add_subparsers(dest="auth_command")
+    auth_subparser.add_parser(
+        "get-username",
+        help="Prints the GitHub username of the authenticated user")
+    auth_subparser.add_parser(
+        "logout", help="Delete the auth token from your keyring on this PC")
+
     screenshot_parser = subcommands.add_parser(
         "screenshot", help="Save a screenshot to disk",
         description="""Take a screenshot from the specified Stb-tester node
@@ -395,6 +408,30 @@ def _exit(signo, _):
     logger.warning("Received %s. Stopping job.", name)
     # Teardown is handled by TestJob.__exit__
     sys.exit(0)
+
+
+def cmd_auth(args):
+    # type: (argparse.Namespace) -> int
+    if args.auth_command == "logout":
+        try:
+            import keyring
+            if keyring.get_password(args.portal_url, "stb-tester") is None:
+                sys.stderr.write("No auth token stored in keyring\n")
+            else:
+                keyring.delete_password(args.portal_url, "stb-tester")
+                sys.stderr.write("Deleted auth token from keyring\n")
+        except ImportError:
+            sys.stderr.write(
+                "Install the python \"keyring\" package to use "
+                "\"stbt_rig auth\"\n")
+            return 1
+    elif args.auth_command == "get-username" or args.auth_command is None:
+        # This will prompt the user for a token if none is stored:
+        portal = Portal.from_args(args)
+        print(portal.get_user()['login'])
+    else:
+        assert False, "Unreachable: Unknown auth_command %r" % args.auth_command
+    return 0
 
 
 def cmd_run(args, node):
@@ -490,6 +527,7 @@ def cmd_run_prep(args, portal):
 
 
 def cmd_run_body(args, node, j):
+    # type: (argparse.Namespace, Node, JobPrepResult) -> int
     logger.info("Running tests...")
 
     try:
@@ -771,7 +809,7 @@ def setup_stage2(this_stbt_rig, root, args, node_id):
 
     # This will prompt for the auth token and validate connectivity:
     portal = Portal.from_args(args)
-    portal._get("/api/v2/user")
+    portal.get_user()
 
     for k in "name", "email":
         try:
@@ -942,9 +980,7 @@ def _update_env(updates):
 
 
 def _get_snapshot_branch_name(portal):
-    response = portal._get("/api/v2/user")
-    response.raise_for_status()
-    username = response.json()["login"]
+    username = portal.get_user()["login"]
     return "refs/snapshots/%s" % username
 
 
@@ -1060,7 +1096,9 @@ class PortalAuthTokensAdapter(HTTPAdapter):
                    self.portal_url,))
 
         while True:
-            token = ask('Enter Access Token for portal %s: ' % self.portal_url)
+            sys.stderr.write(
+                'Enter Access Token for portal %s: ' % self.portal_url)
+            token = ask()
             if not token:
                 continue
             token = token.strip()
@@ -1346,8 +1384,8 @@ class TimeoutException(RuntimeError):
 
 class Node(object):
     def __init__(self, portal, node_id):
-        self.portal = portal
-        self.node_id = node_id
+        self.portal = portal  # type: Portal
+        self.node_id = node_id  # type: str
 
     def run_tests(self, *args, **kwargs):
         return self.portal.run_tests(self.node_id, *args, **kwargs)
@@ -1489,6 +1527,11 @@ class Portal(object):
         resp = self._get("/api/v2/secrets.pub.pem")
         resp.raise_for_status()
         return resp.text
+
+    def get_user(self):
+        resp = self._get("/api/v2/user")
+        resp.raise_for_status()
+        return resp.json()
 
     def _get(self, endpoint, timeout=60, **kwargs):
         return self._session.get(self.url(endpoint), timeout=timeout, **kwargs)
