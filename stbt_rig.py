@@ -1658,7 +1658,8 @@ class TestPack(object):
         # otherwise github can error with "rejected", so use file locking:
         lockfilename = self._git(
             ["rev-parse", "--git-path", "stbt-rig-snapshot.lock"]).strip()
-        with open(lockfilename, "w") as lock, file_lock(lock.fileno()):
+
+        with flock(lockfilename):
             commit_sha, run_sha = self.take_snapshot()
             options = ['--force']
             if not logger.isEnabledFor(logging.DEBUG):
@@ -1671,6 +1672,22 @@ class TestPack(object):
                  '%s:%s' % (commit_sha, branch)],
                 interactive=interactive)
             return run_sha
+
+
+@contextmanager
+def flock(filename):
+    with open(filename, "a+b") as f:
+        f.seek(0)
+        failed_attempting_lock = True
+        try:
+            with file_lock(f.fileno()):
+                failed_attempting_lock = False
+                yield
+        except (OSError, IOError) as e:
+            if failed_attempting_lock:
+                die("Failed to lock %r within 10s: %s" % (filename, e))
+            else:
+                raise
 
 
 if platform.system() == "Windows":
@@ -1686,7 +1703,17 @@ else:
     @contextmanager
     def file_lock(fileno):
         import fcntl
-        fcntl.flock(fileno, fcntl.LOCK_EX)
+        # Makes locking on UNIX match the behaviour on Windows where we give up
+        # on locking after 10s:
+        for n in range(10):
+            try:
+                fcntl.flock(fileno, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except IOError as e:
+                if e.errno in [errno.EAGAIN, errno.EWOULDBLOCK] and n < 9:
+                    time.sleep(1)
+                else:
+                    raise
         try:
             yield
         finally:

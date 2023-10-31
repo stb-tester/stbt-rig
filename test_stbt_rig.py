@@ -341,6 +341,27 @@ def test_file_lock():
             t.join()
 
 
+def test_file_lock_slow(tmpdir):
+    env = os.environ.copy()
+    env["PYTHONPATH"] = _find_file('.')
+
+    cmd = dedent("""\
+        import time
+        import stbt_rig
+        with stbt_rig.flock("lockfile"):
+            time.sleep(20)
+        """)
+    p = subprocess.Popen([python, "-c", cmd], cwd=str(tmpdir), env=env)
+    time.sleep(0.5)
+    p2 = subprocess.Popen(
+        [python, "-c", cmd], stderr=subprocess.PIPE, cwd=str(tmpdir), env=env)
+    assert p2.wait(15) == 1
+
+    errmsg = p2.stderr.read().decode().strip()
+    assert "Failed to lock" in errmsg
+    p.kill()
+
+
 def test_modify_config():
     def test(cfg):
         if sys.version_info[0] == 2:
