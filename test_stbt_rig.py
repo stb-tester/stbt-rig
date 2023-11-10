@@ -359,6 +359,7 @@ def test_file_lock_slow(tmpdir):
 
     errmsg = p2.stderr.read().decode().strip()
     assert "Failed to lock" in errmsg
+    assert errmsg.endswith("File is currently locked by pid %i" % p.pid)
     p.kill()
 
 

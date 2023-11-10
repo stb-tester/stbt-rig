@@ -1682,10 +1682,21 @@ def flock(filename):
         try:
             with file_lock(f.fileno()):
                 failed_attempting_lock = False
+                bytes_written = f.write(b"%20d" % os.getpid())
+                f.flush()
+                f.truncate(bytes_written)
                 yield
         except (OSError, IOError) as e:
             if failed_attempting_lock:
-                die("Failed to lock %r within 10s: %s" % (filename, e))
+                try:
+                    pid = f.read(20)
+                except Exception:  # pylint:disable=broad-except
+                    logger.warning(
+                        "Failed to read pid from %r", filename, exc_info=True)
+                    pid = b"<unknown>"
+                die("Failed to lock %r within 10s: %s.  File is currently "
+                    "locked by pid %s" % (
+                        filename, e, to_native_str(pid).strip()))
             else:
                 raise
 
@@ -1693,12 +1704,23 @@ def flock(filename):
 if platform.system() == "Windows":
     @contextmanager
     def file_lock(fileno):
+        # Arbitrarily chosen position in the file, sufficiently far from the
+        # beginning that it won't overlap with the pid:
+        LOCK_POS = 20
+
         import msvcrt  # pylint: disable=import-error
+        # Seek to specific position and lock 1 byte.  We don't want to lock the
+        # beginning of the file because that would prevent other processes from
+        # reading the pid from it:
+        pos = os.lseek(fileno, LOCK_POS, os.SEEK_SET)
         msvcrt.locking(fileno, msvcrt.LK_LOCK, 1)
+        os.lseek(fileno, pos, os.SEEK_SET)
         try:
             yield
         finally:
+            pos = os.lseek(fileno, LOCK_POS, os.SEEK_SET)
             msvcrt.locking(fileno, msvcrt.LK_UNLCK, 1)
+            os.lseek(fileno, pos, os.SEEK_SET)
 else:
     @contextmanager
     def file_lock(fileno):
