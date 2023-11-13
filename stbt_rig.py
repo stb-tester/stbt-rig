@@ -1688,15 +1688,16 @@ def flock(filename):
                 yield
         except (OSError, IOError) as e:
             if failed_attempting_lock:
-                try:
-                    pid = f.read(20)
-                except Exception:  # pylint:disable=broad-except
-                    logger.warning(
-                        "Failed to read pid from %r", filename, exc_info=True)
-                    pid = b"<unknown>"
-                die("Failed to lock %r within 10s: %s.  File is currently "
-                    "locked by pid %s" % (
-                        filename, e, to_native_str(pid).strip()))
+                msg = "Failed to lock %r: %s" % (filename, e)
+                if platform.system() != "Windows":
+                    try:
+                        pid = to_native_str(f.read(20).strip())
+                        msg += ".  File is currently locked by pid %s" % pid
+                    except Exception:  # pylint:disable=broad-except
+                        logger.warning(
+                            "Failed to read pid from %r", filename,
+                            exc_info=True)
+                die(msg)
             else:
                 raise
 
