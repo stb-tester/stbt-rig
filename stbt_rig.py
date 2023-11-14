@@ -1658,7 +1658,8 @@ class TestPack(object):
         # otherwise github can error with "rejected", so use file locking:
         lockfilename = self._git(
             ["rev-parse", "--git-path", "stbt-rig-snapshot.lock"]).strip()
-        with open(lockfilename, "w") as lock, file_lock(lock.fileno()):
+
+        with flock(lockfilename):
             commit_sha, run_sha = self.take_snapshot()
             options = ['--force']
             if not logger.isEnabledFor(logging.DEBUG):
@@ -1673,20 +1674,69 @@ class TestPack(object):
             return run_sha
 
 
+@contextmanager
+def flock(filename):
+    with open(filename, "a+b") as f:
+        f.seek(0)
+        failed_attempting_lock = True
+        try:
+            with file_lock(f.fileno()):
+                failed_attempting_lock = False
+                bytes_written = f.write(b"%20d" % os.getpid())
+                f.flush()
+                f.truncate(bytes_written)
+                yield
+        except (OSError, IOError) as e:
+            if failed_attempting_lock:
+                msg = "Failed to lock %r: %s" % (filename, e)
+                if platform.system() != "Windows":
+                    try:
+                        pid = to_native_str(f.read(20).strip())
+                        msg += ".  File is currently locked by pid %s" % pid
+                    except Exception:  # pylint:disable=broad-except
+                        logger.warning(
+                            "Failed to read pid from %r", filename,
+                            exc_info=True)
+                die(msg)
+            else:
+                raise
+
+
 if platform.system() == "Windows":
     @contextmanager
     def file_lock(fileno):
+        # Arbitrarily chosen position in the file, sufficiently far from the
+        # beginning that it won't overlap with the pid:
+        LOCK_POS = 20
+
         import msvcrt  # pylint: disable=import-error
+        # Seek to specific position and lock 1 byte.  We don't want to lock the
+        # beginning of the file because that would prevent other processes from
+        # reading the pid from it:
+        pos = os.lseek(fileno, LOCK_POS, os.SEEK_SET)
         msvcrt.locking(fileno, msvcrt.LK_LOCK, 1)
+        os.lseek(fileno, pos, os.SEEK_SET)
         try:
             yield
         finally:
+            pos = os.lseek(fileno, LOCK_POS, os.SEEK_SET)
             msvcrt.locking(fileno, msvcrt.LK_UNLCK, 1)
+            os.lseek(fileno, pos, os.SEEK_SET)
 else:
     @contextmanager
     def file_lock(fileno):
         import fcntl
-        fcntl.flock(fileno, fcntl.LOCK_EX)
+        # Makes locking on UNIX match the behaviour on Windows where we give up
+        # on locking after 10s:
+        for n in range(10):
+            try:
+                fcntl.flock(fileno, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except IOError as e:
+                if e.errno in [errno.EAGAIN, errno.EWOULDBLOCK] and n < 9:
+                    time.sleep(1)
+                else:
+                    raise
         try:
             yield
         finally:

@@ -8,6 +8,7 @@ reports=no
 
 [MESSAGES CONTROL]
 disable=
+  consider-using-f-string,
   import-outside-toplevel,
   invalid-name,
   locally-disabled,
