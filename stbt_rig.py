@@ -905,12 +905,10 @@ def _update_vscode_config():
         "git.fetchOnPull": True,
         "git.pruneOnFetch": True,
         "git.pullBeforeCheckout": True,
+        "pylint.args": ["--load-plugins=_stbt.pylint_plugin"],
+        "pylint.path": ["pylint"],
         "python.envFile": "${workspaceFolder}/.env",
-        "python.linting.enabled": True,
-        "python.linting.mypyEnabled": False,
         "python.testing.nosetestsEnabled": False,
-        "python.linting.pylintArgs": ["--load-plugins=_stbt.pylint_plugin"],
-        "python.linting.pylintEnabled": True,
         "python.testing.pytestArgs": [
             "-p", "stbt_rig",
             "-p", "no:python",
@@ -934,6 +932,13 @@ def _update_vscode_config():
             }
         ]
     }
+    DEPRECATED_KEYS = {
+        "python.linting.enabled",
+        "python.linting.mypyEnabled",
+        "python.linting.pylintArgs",
+        "python.linting.pylintEnabled",
+    }
+
     try:
         with open(".vscode/settings.json") as f:
             cfg = json.load(f)
@@ -944,6 +949,10 @@ def _update_vscode_config():
     for k, v in VS_CODE_CONFIG.items():
         if cfg.get(k) != v:
             cfg[k] = v
+            modified = True
+    for k in list(cfg.keys()):
+        if k in DEPRECATED_KEYS:
+            del cfg[k]
             modified = True
 
     if modified:
