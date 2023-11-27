@@ -906,6 +906,7 @@ def _update_vscode_config():
         "git.pruneOnFetch": True,
         "git.pullBeforeCheckout": True,
         "pylint.args": ["--load-plugins=_stbt.pylint_plugin"],
+        "pylint.path": ["pylint"],
         "python.envFile": "${workspaceFolder}/.env",
         "python.testing.nosetestsEnabled": False,
         "python.testing.pytestArgs": [
