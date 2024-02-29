@@ -910,8 +910,8 @@ def _update_vscode_config():
         "python.envFile": "${workspaceFolder}/.env",
         "python.testing.nosetestsEnabled": False,
         "python.testing.pytestArgs": [
-            "-p", "stbt_rig",
-            "-p", "no:python",
+            "-pstbt_rig",
+            "-pno:python",
             "--override-ini=python_files=*.py",
             "--override-ini=python_functions=test_*",
             "--tb=no", "--capture=no",
