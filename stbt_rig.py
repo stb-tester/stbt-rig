@@ -854,7 +854,53 @@ def setup_stage2(this_stbt_rig, root, args, node_id):
     _update_env(updates)
 
     if args.vscode:
-        _update_vscode_config()
+        VS_CODE_CONFIG = {
+            "git.autoStash": True,
+            "git.closeDiffOnOperation": True,
+            "git.fetchOnPull": True,
+            "git.pruneOnFetch": True,
+            "git.pullBeforeCheckout": True,
+            "pylint.args": ["--load-plugins=_stbt.pylint_plugin"],
+            "pylint.path": ["pylint"],
+            "python.envFile": "${workspaceFolder}/.env",
+            "python.testing.nosetestsEnabled": False,
+            "python.testing.pytestArgs": [
+                "-pstbt_rig",
+                "-pno:python",
+                "--override-ini=python_files=*.py",
+                "--override-ini=python_functions=test_*",
+                "--tb=no", "--capture=no",
+                "tests"
+            ],
+            "python.testing.pytestEnabled": True,
+            "python.testing.unittestEnabled": False,
+            # This requires the "pucelle.run-on-save" VSCode extension:
+            "runOnSave.commands": [
+                {
+                    "match": ".*\\.py$",
+                    "command":
+                    "${workspaceFolder}/%s -m stbt_rig -v snapshot" % _venv_exe(
+                        "python"),
+                    "runIn": "backend",
+                    "runningStatusMessage": "Running stbt_rig snapshot...",
+                    "finishStatusMessage": "Snapshot complete"
+                }
+            ]
+        }
+        VS_CODE_CONFIG_DEPRECATED_KEYS = {
+            "python.linting.enabled",
+            "python.linting.mypyEnabled",
+            "python.linting.pylintArgs",
+            "python.linting.pylintEnabled",
+        }
+        VS_CODE_RECOMMENDED_EXTENSIONS = {"recommendations": [
+            "ms-python.python",
+            "ms-python.pylint",
+            "pucelle.run-on-save",
+        ]}
+        _update_vscode_config("settings.json", VS_CODE_CONFIG,
+                              VS_CODE_CONFIG_DEPRECATED_KEYS)
+        _update_vscode_config("extensions.json", VS_CODE_RECOMMENDED_EXTENSIONS)
 
 
 def _find_python_executable(v, stbt_version):
@@ -896,68 +942,30 @@ def _venv_exe(exe, root=None):
     raise EnvironmentError("No exe %s found in venv" % exe)
 
 
-def _update_vscode_config():
+def _update_vscode_config(filename, new_settings, remove_settings=None):
     import json
 
-    VS_CODE_CONFIG = {
-        "git.autoStash": True,
-        "git.closeDiffOnOperation": True,
-        "git.fetchOnPull": True,
-        "git.pruneOnFetch": True,
-        "git.pullBeforeCheckout": True,
-        "pylint.args": ["--load-plugins=_stbt.pylint_plugin"],
-        "pylint.path": ["pylint"],
-        "python.envFile": "${workspaceFolder}/.env",
-        "python.testing.nosetestsEnabled": False,
-        "python.testing.pytestArgs": [
-            "-pstbt_rig",
-            "-pno:python",
-            "--override-ini=python_files=*.py",
-            "--override-ini=python_functions=test_*",
-            "--tb=no", "--capture=no",
-            "tests"
-        ],
-        "python.testing.pytestEnabled": True,
-        "python.testing.unittestEnabled": False,
-        # This requires the "pucelle.run-on-save" VSCode extension:
-        "runOnSave.commands": [
-            {
-                "match": ".*\\.py$",
-                "command":
-                "${workspaceFolder}/%s -m stbt_rig -v snapshot" % _venv_exe(
-                    "python"),
-                "runIn": "backend",
-                "runningStatusMessage": "Running stbt_rig snapshot...",
-                "finishStatusMessage": "Snapshot complete"
-            }
-        ]
-    }
-    DEPRECATED_KEYS = {
-        "python.linting.enabled",
-        "python.linting.mypyEnabled",
-        "python.linting.pylintArgs",
-        "python.linting.pylintEnabled",
-    }
-
+    filename = os.path.join(".vscode", filename)
     try:
-        with open(".vscode/settings.json") as f:
+        with open(filename) as f:
             cfg = json.load(f)
     except OSError:
         cfg = {}
 
     modified = False
-    for k, v in VS_CODE_CONFIG.items():
+    for k, v in new_settings.items():
         if cfg.get(k) != v:
             cfg[k] = v
             modified = True
-    for k in list(cfg.keys()):
-        if k in DEPRECATED_KEYS:
-            del cfg[k]
-            modified = True
+    if remove_settings:
+        for k in list(cfg.keys()):
+            if k in remove_settings:
+                del cfg[k]
+                modified = True
 
     if modified:
         mkdir_p(".vscode")
-        with sponge(".vscode/settings.json") as f:
+        with sponge(filename) as f:
             f.write(json.dumps(cfg, indent=4, sort_keys=True).encode("utf-8"))
 
 
