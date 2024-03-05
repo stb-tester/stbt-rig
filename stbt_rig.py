@@ -854,6 +854,50 @@ def setup_stage2(this_stbt_rig, root, args, node_id):
     _update_env(updates)
 
     if args.vscode:
+        VS_CODE_CONFIG = {
+            "git.autoStash": True,
+            "git.closeDiffOnOperation": True,
+            "git.fetchOnPull": True,
+            "git.pruneOnFetch": True,
+            "git.pullBeforeCheckout": True,
+            "pylint.args": ["--load-plugins=_stbt.pylint_plugin"],
+            "pylint.path": ["pylint"],
+            "python.envFile": "${workspaceFolder}/.env",
+            "python.testing.nosetestsEnabled": False,
+            "python.testing.pytestArgs": [
+                "-pstbt_rig",
+                "-pno:python",
+                "--override-ini=python_files=*.py",
+                "--override-ini=python_functions=test_*",
+                "--tb=no", "--capture=no",
+                "tests"
+            ],
+            "python.testing.pytestEnabled": True,
+            "python.testing.unittestEnabled": False,
+            # This requires the "pucelle.run-on-save" VSCode extension:
+            "runOnSave.commands": [
+                {
+                    "match": ".*\\.py$",
+                    "command":
+                    "${workspaceFolder}/%s -m stbt_rig -v snapshot" % _venv_exe(
+                        "python"),
+                    "runIn": "backend",
+                    "runningStatusMessage": "Running stbt_rig snapshot...",
+                    "finishStatusMessage": "Snapshot complete"
+                }
+            ]
+        }
+        VS_CODE_CONFIG_DEPRECATED_KEYS = {
+            "python.linting.enabled",
+            "python.linting.mypyEnabled",
+            "python.linting.pylintArgs",
+            "python.linting.pylintEnabled",
+        }
+        VS_CODE_RECOMMENDED_EXTENSIONS = {"recommendations": [
+            "ms-python.python",
+            "ms-python.pylint",
+            "pucelle.run-on-save",
+        ]}
         _update_vscode_config("settings.json", VS_CODE_CONFIG,
                               VS_CODE_CONFIG_DEPRECATED_KEYS)
         _update_vscode_config("extensions.json", VS_CODE_RECOMMENDED_EXTENSIONS)
@@ -896,52 +940,6 @@ def _venv_exe(exe, root=None):
         if os.path.exists(f):
             return f
     raise EnvironmentError("No exe %s found in venv" % exe)
-
-
-VS_CODE_CONFIG = {
-    "git.autoStash": True,
-    "git.closeDiffOnOperation": True,
-    "git.fetchOnPull": True,
-    "git.pruneOnFetch": True,
-    "git.pullBeforeCheckout": True,
-    "pylint.args": ["--load-plugins=_stbt.pylint_plugin"],
-    "pylint.path": ["pylint"],
-    "python.envFile": "${workspaceFolder}/.env",
-    "python.testing.nosetestsEnabled": False,
-    "python.testing.pytestArgs": [
-        "-pstbt_rig",
-        "-pno:python",
-        "--override-ini=python_files=*.py",
-        "--override-ini=python_functions=test_*",
-        "--tb=no", "--capture=no",
-        "tests"
-    ],
-    "python.testing.pytestEnabled": True,
-    "python.testing.unittestEnabled": False,
-    # This requires the "pucelle.run-on-save" VSCode extension:
-    "runOnSave.commands": [
-        {
-            "match": ".*\\.py$",
-            "command":
-            "${workspaceFolder}/%s -m stbt_rig -v snapshot" % _venv_exe(
-                "python"),
-            "runIn": "backend",
-            "runningStatusMessage": "Running stbt_rig snapshot...",
-            "finishStatusMessage": "Snapshot complete"
-        }
-    ]
-}
-VS_CODE_CONFIG_DEPRECATED_KEYS = {
-    "python.linting.enabled",
-    "python.linting.mypyEnabled",
-    "python.linting.pylintArgs",
-    "python.linting.pylintEnabled",
-}
-VS_CODE_RECOMMENDED_EXTENSIONS = {"recommendations": [
-    "ms-python.python",
-    "ms-python.pylint",
-    "pucelle.run-on-save",
-]}
 
 
 def _update_vscode_config(filename, new_settings, remove_settings=None):
