@@ -1,6 +1,6 @@
 # Dependencies of stbt_rig
 keyring
-pytest~=6.2.5
+pytest<8.0
 requests
 tzlocal
 
