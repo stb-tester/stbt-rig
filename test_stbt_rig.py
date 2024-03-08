@@ -31,8 +31,12 @@ def test_testpack_snapshot_no_change_if_no_commits(test_pack):
         commit_sha, run_sha = test_pack.take_snapshot()
         assert rev_parse("HEAD") == run_sha
         assert tree_sha(commit_sha) == tree_sha(run_sha)
-        assert commit_msg(commit_sha) == (
-            "snapshot\n\nremoteref: refs/heads/mybranch")
+        assert re.match(dedent("""\
+            snapshot
+
+            remoteref: refs/heads/mybranch
+            hostname: (drothlisxps13|fv-|Mac-)"""),
+            commit_msg(commit_sha))
 
         # Check that the SHA is deterministic:
         time.sleep(1)

@@ -24,6 +24,7 @@ import platform
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -1660,9 +1661,12 @@ class TestPack(object):
         else:
             extra_env = {}
 
+        commit_message = "snapshot\n\nremoteref: %s\nhostname: %s" % (
+            remoteref, socket.gethostname())
+
         commit_sha = self._git(
-            ['commit-tree', write_tree, '-p', base_commit, '-m',
-             "snapshot\n\nremoteref: %s" % remoteref],
+            ['commit-tree', write_tree, '-p', base_commit,
+             '-m', commit_message],
             extra_env=extra_env).strip()
 
         if no_workingdir_changes:
