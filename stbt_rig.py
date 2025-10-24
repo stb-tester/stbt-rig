@@ -864,6 +864,7 @@ def setup_stage2(this_stbt_rig, root, args, node_id):
             "pylint.args": ["--load-plugins=_stbt.pylint_plugin"],
             "pylint.path": ["pylint"],
             "python.envFile": "${workspaceFolder}/.env",
+            "python.analysis.typeCheckingMode": "basic",
             "python.testing.nosetestsEnabled": False,
             "python.testing.pytestArgs": [
                 "-pstbt_rig",
