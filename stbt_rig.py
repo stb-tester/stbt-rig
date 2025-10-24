@@ -860,6 +860,7 @@ def setup_stage2(this_stbt_rig, root, args, node_id):
             "git.fetchOnPull": True,
             "git.pruneOnFetch": True,
             "git.pullBeforeCheckout": True,
+            "git.rebaseWhenSync": True,
             "pylint.args": ["--load-plugins=_stbt.pylint_plugin"],
             "pylint.path": ["pylint"],
             "python.envFile": "${workspaceFolder}/.env",
