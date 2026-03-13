@@ -671,8 +671,9 @@ def cmd_screenshot(args, node):
 
 def cmd_snapshot(args, node):
     branch_name = _get_snapshot_branch_name(node.portal)
-    TestPack(remote=args.git_remote).push_git_snapshot(branch_name)
+    sha = TestPack(remote=args.git_remote).push_git_snapshot(branch_name)
     node.portal.notify_push()
+    print(sha)
 
 
 def cmd_setup(args, node_id):
