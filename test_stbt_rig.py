@@ -520,7 +520,7 @@ def test_update_mcp_config():
             with open(f.name, "rb") as f2:
                 new_data2 = f2.read().decode()
             assert new_data == new_data2
-            return new_data
+            return new_data.replace("\r\n", "\n")
         finally:
             try:
                 os.unlink(f.name)
