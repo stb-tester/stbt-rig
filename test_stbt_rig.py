@@ -504,12 +504,14 @@ def test_modify_config():
 def test_update_mcp_config():
     def test(cfg, new_servers, new_inputs):
         # type: (str | None, dict[str, dict[str, str]], list[dict[str, str]]) -> str
-        with NamedTemporaryFile("w+t") as f:
+        f = NamedTemporaryFile("w+t", delete=False)
+        try:
             if cfg is None:
                 f.close()
+                os.unlink(f.name)
             else:
                 f.write(dedent(cfg))
-                f.flush()
+                f.close()
             _update_mcp_config(f.name, new_servers, new_inputs)
             with open(f.name, "rb") as f2:
                 new_data = f2.read().decode()
@@ -519,6 +521,11 @@ def test_update_mcp_config():
                 new_data2 = f2.read().decode()
             assert new_data == new_data2
             return new_data
+        finally:
+            try:
+                os.unlink(f.name)
+            except OSError:
+                pass
 
     servers = {"server1": {"url": "http://example.com"}}
     inputs = [{"id": "a", "foo": "bar"}]
