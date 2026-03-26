@@ -16,8 +16,13 @@ from textwrap import dedent
 
 import stbt_rig
 from stbt_rig import (
-    _modify_config, file_lock, named_temporary_directory, to_native_str,
-    to_unicode)
+    _modify_config,
+    _update_mcp_config,
+    file_lock,
+    named_temporary_directory,
+    to_native_str,
+    to_unicode,
+)
 from conftest import (subprocess, PortalMock)
 
 try:
@@ -494,6 +499,88 @@ def test_modify_config():
 
         [clumpy_cloos]
         """)
+
+
+def test_update_mcp_config():
+    def test(cfg, new_servers, new_inputs):
+        # type: (str | None, dict[str, dict[str, str]], list[dict[str, str]]) -> str
+        with NamedTemporaryFile("w+t") as f:
+            if cfg is None:
+                f.close()
+            else:
+                f.write(dedent(cfg))
+                f.flush()
+            _update_mcp_config(f.name, new_servers, new_inputs)
+            with open(f.name, "rb") as f2:
+                new_data = f2.read().decode()
+            # Idempotent:
+            _update_mcp_config(f.name, new_servers, new_inputs)
+            with open(f.name, "rb") as f2:
+                new_data2 = f2.read().decode()
+            assert new_data == new_data2
+            return new_data
+
+    servers = {"server1": {"url": "http://example.com"}}
+    inputs = [{"id": "a", "foo": "bar"}]
+    expected = dedent("""\
+        {
+            "servers": {
+                "server1": {
+                    "url": "http://example.com"
+                }
+            },
+            "inputs": [
+                {
+                    "id": "a",
+                    "foo": "bar"
+                }
+            ]
+        }""")
+    assert test(None, servers, inputs) == expected
+    assert test("{}", servers, inputs) == expected
+    assert test(expected, servers, inputs) == expected
+    assert test(dedent("""\
+        {
+            "servers": {},
+            "inputs": []
+        }"""), servers, inputs) == expected
+    assert test(dedent(
+        """\
+        {
+            "servers": {
+                "different": {
+                    "url": "http://different.example.com"
+                }
+            },
+            "inputs": [
+                {
+                    "id": "b",
+                    "foo": "qux"
+                }
+            ]
+        }"""), servers, inputs) == dedent(
+            """\
+        {
+            "servers": {
+                "different": {
+                    "url": "http://different.example.com"
+                },
+                "server1": {
+                    "url": "http://example.com"
+                }
+            },
+            "inputs": [
+                {
+                    "id": "b",
+                    "foo": "qux"
+                },
+                {
+                    "id": "a",
+                    "foo": "bar"
+                }
+            ]
+        }""")
+
 
 
 def test_encrypt_secret(portal_mock, test_pack):

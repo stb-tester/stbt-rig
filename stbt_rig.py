@@ -671,8 +671,9 @@ def cmd_screenshot(args, node):
 
 def cmd_snapshot(args, node):
     branch_name = _get_snapshot_branch_name(node.portal)
-    TestPack(remote=args.git_remote).push_git_snapshot(branch_name)
+    sha = TestPack(remote=args.git_remote).push_git_snapshot(branch_name)
     node.portal.notify_push()
+    print(sha)
 
 
 def cmd_setup(args, node_id):
@@ -854,6 +855,8 @@ def setup_stage2(this_stbt_rig, root, args, node_id):
     _update_env(updates)
 
     if args.vscode:
+        _, config_parser = read_stbt_conf(root)
+        portal_url = config_parser.get("test_pack", "portal_url")
         VS_CODE_CONFIG = {
             "git.autoStash": True,
             "git.closeDiffOnOperation": True,
@@ -899,9 +902,30 @@ def setup_stage2(this_stbt_rig, root, args, node_id):
             "ms-python.pylint",
             "pucelle.run-on-save",
         ]}
+        MCP_CONFIG = {
+            "servers": {
+                "stb-tester-portal": {
+                    "type": "http",
+                    "url": "%s/api/v2/mcp" % portal_url,
+                    "headers": {
+                        "Authorization": "token ${input:stbt-auth-token}"
+                    }
+                }
+            },
+            "inputs": [
+                {
+                    "type": "promptString",
+                    "id": "stbt-auth-token",
+                    "description": "Stb-tester REST API access token",
+                    "password": True,
+                }
+            ]
+        }
         _update_vscode_config("settings.json", VS_CODE_CONFIG,
                               VS_CODE_CONFIG_DEPRECATED_KEYS)
         _update_vscode_config("extensions.json", VS_CODE_RECOMMENDED_EXTENSIONS)
+        _update_mcp_config(
+            ".vscode/mcp.json", MCP_CONFIG["servers"], MCP_CONFIG["inputs"])
 
 
 def _find_python_executable(v, stbt_version):
@@ -953,11 +977,7 @@ def _update_vscode_config(filename, new_settings, remove_settings=None):
     except OSError:
         cfg = {}
 
-    modified = False
-    for k, v in new_settings.items():
-        if cfg.get(k) != v:
-            cfg[k] = v
-            modified = True
+    modified = _sync_dict(cfg, new_settings)
     if remove_settings:
         for k in list(cfg.keys()):
             if k in remove_settings:
@@ -968,6 +988,36 @@ def _update_vscode_config(filename, new_settings, remove_settings=None):
         mkdir_p(".vscode")
         with sponge(filename) as f:
             f.write(json.dumps(cfg, indent=4, sort_keys=True).encode("utf-8"))
+
+
+def _update_mcp_config(filename, new_servers, new_inputs):
+    import json
+    try:
+        with open(filename, "rb") as f:
+            mcp = json.load(f)
+    except FileNotFoundError:
+        mcp = {}
+    modified = _sync_dict(mcp.setdefault("servers", {}), new_servers)
+    for d in new_inputs:
+        for user_mcp in mcp.setdefault("inputs", []):
+            if user_mcp.get("id") == d["id"]:
+                modified |= _sync_dict(user_mcp, d)
+                break
+        else:
+            mcp["inputs"].append(d)
+            modified = True
+    if modified:
+        with sponge(filename) as f:
+            f.write(json.dumps(mcp, indent=4, sort_keys=False).encode("utf-8"))
+
+
+def _sync_dict(d, updates):
+    modified = False
+    for k, v in updates.items():
+        if d.get(k) != v:
+            d[k] = v
+            modified = True
+    return modified
 
 
 def _update_env(updates):
